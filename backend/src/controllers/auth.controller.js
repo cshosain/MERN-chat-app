@@ -1,6 +1,7 @@
 import { generateToken } from "../lib/utils.js";
 import User from "../models/user.model.js";
 import bcrypt from "bcryptjs";
+import cloudinary from "../lib/cloudinary.js";
 
 export const register = async (req, res) => {
   const { fullName, email, password, profilePic } = req.body;
@@ -107,6 +108,18 @@ export const updateProfile = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
     return res.status(200).json(updatedUser);
+  } catch (error) {
+    console.error(`Error: ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const checkAuth = (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: "Not authorized" });
+    }
+    return res.status(200).json(req.user);
   } catch (error) {
     console.error(`Error: ${error.message}`);
     res.status(500).json({ message: "Server error" });
