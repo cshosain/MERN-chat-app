@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useChatStore } from "../store/useChatStore";
+import { useAuthStore } from "../store/useAuthStore";
 import { Image, Send, X } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -8,6 +9,9 @@ const MessageInput = () => {
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
   const { sendMessage } = useChatStore();
+  const { socket } = useAuthStore();
+  const { selectedUser } = useChatStore();
+  let typingTimeout = useRef(null);
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
@@ -47,6 +51,16 @@ const MessageInput = () => {
     }
   };
 
+  const handleTyping = () => {
+    if (socket && selectedUser) {
+      socket.emit("typing", { receiverId: selectedUser._id });
+      clearTimeout(typingTimeout.current);
+      typingTimeout.current = setTimeout(() => {
+        socket.emit("stopTyping", { receiverId: selectedUser._id });
+      }, 1500); // 1.5 seconds after last keypress
+    }
+  };
+
   return (
     <div className="p-4 w-full">
       {imagePreview && (
@@ -76,7 +90,10 @@ const MessageInput = () => {
             className="w-full input input-bordered rounded-lg input-sm sm:input-md"
             placeholder="Type a message..."
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              handleTyping();
+            }}
           />
           <input
             type="file"

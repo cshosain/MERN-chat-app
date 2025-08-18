@@ -34,6 +34,24 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("typing", ({ receiverId }) => {
+    const receiverSocketId = onlineUsers[receiverId];
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit("typing", {
+        senderId: socket.handshake.query.userId,
+      });
+    }
+  });
+
+  socket.on("stopTyping", ({ receiverId }) => {
+    const receiverSocketId = onlineUsers[receiverId];
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit("stopTyping", {
+        senderId: socket.handshake.query.userId,
+      });
+    }
+  });
+
   // Add more event listeners as needed
 });
 export { io, httpServer, app };
