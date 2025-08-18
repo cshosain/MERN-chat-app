@@ -5,8 +5,8 @@ import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import { connectDB } from "./lib/db.js";
 import cors from "cors";
+import { io, httpServer, app } from "./lib/socket.js";
 
-const app = express();
 dotenv.config();
 const PORT = process.env.PORT || 3001;
 app.use(express.json({ limit: "2mb" })); // Increase limit as needed
@@ -33,7 +33,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: "Server error" });
 });
 
-app.listen(PORT, () => {
+httpServer.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
   connectDB();
 });
