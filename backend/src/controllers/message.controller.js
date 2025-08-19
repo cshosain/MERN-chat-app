@@ -6,10 +6,63 @@ import { getReceiverSocketId, io } from "../lib/socket.js";
 export const getUsersForSidebar = async (req, res) => {
   try {
     const loggedInUserId = req.user._id;
-    const filteredUsers = await User.find({
-      _id: { $ne: loggedInUserId },
-    }).select("-password");
-    res.status(200).json(filteredUsers);
+
+    const usersWithLastMsg = await User.aggregate([
+      // exclude logged-in user
+      { $match: { _id: { $ne: loggedInUserId } } },
+
+      // join with messages collection
+      {
+        $lookup: {
+          from: "messages",
+          let: { userId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $or: [
+                    {
+                      $and: [
+                        { $eq: ["$senderId", loggedInUserId] },
+                        { $eq: ["$receiverId", "$$userId"] },
+                      ],
+                    },
+                    {
+                      $and: [
+                        { $eq: ["$senderId", "$$userId"] },
+                        { $eq: ["$receiverId", loggedInUserId] },
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+            { $sort: { createdAt: -1 } },
+            { $limit: 1 },
+          ],
+          as: "lastMessage",
+        },
+      },
+
+      // flatten lastMessage array → object
+      {
+        $addFields: {
+          lastMessage: { $arrayElemAt: ["$lastMessage", 0] },
+        },
+      },
+
+      // hide password
+      { $project: { password: 0 } },
+
+      // sort by lastMessage.createdAt
+      {
+        $sort: {
+          "lastMessage.createdAt": -1,
+        },
+      },
+    ]);
+
+    res.status(200).json(usersWithLastMsg);
   } catch (error) {
     console.error(`Error: ${error.message}`);
     res.status(500).json({ message: "Server error" });

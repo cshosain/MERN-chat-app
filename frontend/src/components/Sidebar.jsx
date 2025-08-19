@@ -5,8 +5,14 @@ import SidebarSkeleton from "./skeletons/SidebarSkeleton";
 import { Users } from "lucide-react";
 
 const Sidebar = () => {
-  const { getUsers, users, selectedUser, setSelectedUser, isUsersLoading } =
-    useChatStore();
+  const {
+    getUsers,
+    users,
+    selectedUser,
+    setSelectedUser,
+    isUsersLoading,
+    latestMessages,
+  } = useChatStore();
 
   const { onlineUsers } = useAuthStore();
   const [showOnlineUserOnly, setShowOnlineUserOnly] = useState(false);
@@ -17,6 +23,16 @@ const Sidebar = () => {
   const filteredUsers = showOnlineUserOnly
     ? users.filter((user) => onlineUsers.includes(user._id))
     : users;
+
+  // Sort users by latest message time (descending)
+  const sortedUsers = [...filteredUsers].sort((a, b) => {
+    const aMsg = latestMessages[a._id];
+    const bMsg = latestMessages[b._id];
+    if (!aMsg && !bMsg) return 0;
+    if (!aMsg) return 1;
+    if (!bMsg) return -1;
+    return new Date(bMsg.createdAt) - new Date(aMsg.createdAt);
+  });
 
   if (isUsersLoading) return <SidebarSkeleton />;
 
@@ -51,11 +67,13 @@ const Sidebar = () => {
       </div>
 
       <div className="overflow-y-auto w-full py-3">
-        {filteredUsers.map((user) => (
-          <button
-            key={user._id}
-            onClick={() => setSelectedUser(user)}
-            className={`
+        {sortedUsers.map((user) => {
+          const lastMsg = latestMessages[user._id];
+          return (
+            <button
+              key={user._id}
+              onClick={() => setSelectedUser(user)}
+              className={`
               w-full p-3 flex items-center gap-3
               hover:bg-base-300 transition-colors
               ${
@@ -64,30 +82,39 @@ const Sidebar = () => {
                   : ""
               }
             `}
-          >
-            <div className="relative mx-auto lg:mx-0">
-              <img
-                src={user.profilePic || "/avatar.png"}
-                alt={user.name}
-                className="size-12 object-cover rounded-full"
-              />
-              {onlineUsers.includes(user._id) && (
-                <span
-                  className="absolute bottom-0 right-0 size-3 bg-green-500 
-                  rounded-full ring-2 ring-zinc-900"
+            >
+              <div className="relative mx-auto lg:mx-0">
+                <img
+                  src={user.profilePic || "/avatar.png"}
+                  alt={user.name}
+                  className="size-12 object-cover rounded-full"
                 />
-              )}
-            </div>
-
-            {/* User info - only visible on larger screens */}
-            <div className="hidden lg:block text-left min-w-0">
-              <div className="font-medium truncate">{user.fullName}</div>
-              <div className="text-sm text-zinc-400">
-                {onlineUsers.includes(user._id) ? "Online" : "Offline"}
+                {onlineUsers.includes(user._id) && (
+                  <span
+                    className="absolute bottom-0 right-0 size-3 bg-green-500 
+                  rounded-full ring-2 ring-zinc-900"
+                  />
+                )}
               </div>
-            </div>
-          </button>
-        ))}
+
+              {/* User info - only visible on larger screens */}
+              <div className="hidden lg:block text-left min-w-0">
+                <div className="font-medium truncate">{user.fullName}</div>
+                <div className="text-sm text-zinc-400">
+                  {lastMsg
+                    ? lastMsg.text
+                      ? lastMsg.text
+                      : lastMsg.image
+                      ? "📷 Photo"
+                      : ""
+                    : onlineUsers.includes(user._id)
+                    ? "Online"
+                    : "Offline"}
+                </div>
+              </div>
+            </button>
+          );
+        })}
 
         {filteredUsers.length === 0 && (
           <div className="text-center text-zinc-500 py-4">No online users</div>

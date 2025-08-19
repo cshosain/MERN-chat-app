@@ -10,13 +10,21 @@ import { useEffect } from "react";
 import { Loader } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 import { useThemeStore } from "./store/useThemeStore";
+import { useChatStore } from "./store/useChatStore";
 
 function App() {
   const { authUser, checkAuth, isCheckingAuth } = useAuthStore();
   const { theme } = useThemeStore();
+  const { initSocketListeners } = useChatStore();
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
+
+  useEffect(() => {
+    setTimeout(() => {
+      initSocketListeners(); //connect the socket after some prev task like auth check, thats why need to make async
+    }, 500);
+  }, [initSocketListeners, authUser]);
 
   if (isCheckingAuth && !authUser) {
     return (
