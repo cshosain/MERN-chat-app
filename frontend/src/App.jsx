@@ -11,20 +11,25 @@ import { Loader } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 import { useThemeStore } from "./store/useThemeStore";
 import { useChatStore } from "./store/useChatStore";
+import FriendsPage from "./pages/FriendsPage";
+import FriendRequestsPage from "./pages/FriendRequestsPage";
+import MessageRequestsPage from "./pages/MessageRequestsPage";
 
 function App() {
-  const { authUser, checkAuth, isCheckingAuth } = useAuthStore();
+  const { authUser, checkAuth, isCheckingAuth, socket } = useAuthStore();
   const { theme } = useThemeStore();
   const { initSocketListeners } = useChatStore();
+
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
 
+  // ✅ only run socket init when authUser and socket are ready
   useEffect(() => {
-    setTimeout(() => {
-      initSocketListeners(); //connect the socket after some prev task like auth check, thats why need to make async
-    }, 500);
-  }, [initSocketListeners, authUser]);
+    if (authUser && socket) {
+      initSocketListeners();
+    }
+  }, [authUser, socket, initSocketListeners]);
 
   if (isCheckingAuth && !authUser) {
     return (
@@ -48,6 +53,20 @@ function App() {
           element={authUser ? <ProfilePage /> : <Navigate to="/login" />}
         />
         <Route
+          path="/friends"
+          element={authUser ? <FriendsPage /> : <Navigate to="/login" />}
+        />
+        <Route
+          path="/friend-requests"
+          element={authUser ? <FriendRequestsPage /> : <Navigate to="/login" />}
+        />
+        <Route
+          path="/message-requests"
+          element={
+            authUser ? <MessageRequestsPage /> : <Navigate to="/login" />
+          }
+        />
+        <Route
           path="/signup"
           element={!authUser ? <SignupPage /> : <Navigate to="/" />}
         />
@@ -55,7 +74,6 @@ function App() {
           path="/login"
           element={!authUser ? <LoginPage /> : <Navigate to="/" />}
         />
-        {/* Add other routes as needed */}
       </Routes>
       <Toaster />
     </div>

@@ -6,59 +6,55 @@ import { Users } from "lucide-react";
 
 const Sidebar = () => {
   const {
-    getUsers,
-    users,
-    selectedUser,
-    setSelectedUser,
-    isUsersLoading,
-    latestMessages,
+    getConversations,
+    conversations,
+    selectedConversation,
+    setSelectedConversation,
+    isConversationsLoading,
   } = useChatStore();
 
-  const { onlineUsers } = useAuthStore();
-  const [showOnlineUserOnly, setShowOnlineUserOnly] = useState(false);
+  const { authUser, onlineUsers } = useAuthStore();
+  const [showOnlineOnly, setShowOnlineOnly] = useState(false);
 
   useEffect(() => {
-    getUsers();
-  }, [getUsers]);
-  const filteredUsers = showOnlineUserOnly
-    ? users.filter((user) => onlineUsers.includes(user._id))
-    : users;
+    getConversations();
+  }, [getConversations]);
 
-  // Sort users by latest message time (descending)
-  const sortedUsers = [...filteredUsers].sort((a, b) => {
-    const aMsg = latestMessages[a._id];
-    const bMsg = latestMessages[b._id];
-    if (!aMsg && !bMsg) return 0;
-    if (!aMsg) return 1;
-    if (!bMsg) return -1;
-    return new Date(bMsg.createdAt) - new Date(aMsg.createdAt);
-  });
+  useEffect(() => {
+    console.log(selectedConversation);
+  }, [selectedConversation]);
 
-  if (isUsersLoading) return <SidebarSkeleton />;
+  // filter if "online only" checked (works only for 1-1 convos)
+  const filtered = showOnlineOnly
+    ? conversations.filter((c) => {
+        if (c.isGroup) return true; // groups always visible
+        const other = c.participants.find((p) => p._id !== authUser._id);
+        return other && onlineUsers.includes(other._id);
+      })
+    : conversations;
+
+  if (isConversationsLoading) return <SidebarSkeleton />;
 
   return (
-    <aside className="h-full w-20 lg:w-72 border-r border-base-300 flex flex-col transition-all duration-200">
+    <aside className="h-full w-20 lg:w-72 border-r border-base-300 flex flex-col">
       <div className="border-b border-base-300 w-full p-5">
         <div className="flex items-center gap-2">
           <Users className="size-6" />
-          <span className="font-medium hidden lg:block">Contacts</span>
+          <span className="font-medium hidden lg:block">Chats</span>
         </div>
-        {/* TODO: Online filter toggle */}
         <div className="mt-3 hidden lg:flex items-center gap-2">
           <label
-            htmlFor="showOnlineUserOnly"
+            htmlFor="showOnlineOnly"
             className="cursor-pointer flex items-center gap-2"
           >
             <input
-              id="showOnlineUserOnly"
+              id="showOnlineOnly"
               type="checkbox"
-              checked={showOnlineUserOnly}
-              onChange={(e) => setShowOnlineUserOnly(e.target.checked)}
+              checked={showOnlineOnly}
+              onChange={(e) => setShowOnlineOnly(e.target.checked)}
               className="checkbox checkbox-sm"
             />
-            <span htmlFor="showOnlineUserOnly " className="text-sm">
-              Show online only
-            </span>
+            <span className="text-sm">Show online only</span>
           </label>
           <span className="text-xs text-zinc-500">
             ({onlineUsers.length - 1} online)
@@ -67,57 +63,67 @@ const Sidebar = () => {
       </div>
 
       <div className="overflow-y-auto w-full py-3">
-        {sortedUsers.map((user) => {
-          const lastMsg = latestMessages[user._id];
+        {filtered.map((conv) => {
+          const other =
+            !conv.isGroup &&
+            conv.participants.find((p) => p._id !== authUser._id);
+
+          const displayName = conv.isGroup
+            ? conv.groupName
+            : other?.fullName || "Unknown";
+
+          const displayPic = conv.isGroup
+            ? conv.groupImage || "/group.png"
+            : other?.profilePic || "/avatar.png";
+
+          const lastMsg = conv.lastMessage;
+          const unread = conv.unreadCount || 0;
+
           return (
             <button
-              key={user._id}
-              onClick={() => setSelectedUser(user)}
-              className={`
-              w-full p-3 flex items-center gap-3
-              hover:bg-base-300 transition-colors
-              ${
-                selectedUser?._id === user._id
+              key={conv._id}
+              onClick={() => setSelectedConversation(conv)}
+              className={`w-full p-3 flex items-center gap-3 hover:bg-base-300 transition-colors ${
+                selectedConversation?._id === conv._id
                   ? "bg-base-300 ring-1 ring-base-300"
                   : ""
-              }
-            `}
+              }`}
             >
               <div className="relative mx-auto lg:mx-0">
                 <img
-                  src={user.profilePic || "/avatar.png"}
-                  alt={user.name}
+                  src={displayPic}
+                  alt={displayName}
                   className="size-12 object-cover rounded-full"
                 />
-                {onlineUsers.includes(user._id) && (
-                  <span
-                    className="absolute bottom-0 right-0 size-3 bg-green-500 
-                  rounded-full ring-2 ring-zinc-900"
-                  />
+                {!conv.isGroup && other && onlineUsers.includes(other._id) && (
+                  <span className="absolute bottom-0 right-0 size-3 bg-green-500 rounded-full ring-2 ring-zinc-900" />
                 )}
               </div>
 
-              {/* User info - only visible on larger screens */}
-              <div className="hidden lg:block text-left min-w-0">
-                <div className="font-medium truncate">{user.fullName}</div>
-                <div className="text-sm text-zinc-400">
+              <div className="hidden lg:block text-left min-w-0 flex-1">
+                <div className="font-medium truncate flex justify-between">
+                  <span>{displayName}</span>
+                  {unread > 0 && (
+                    <span className="badge badge-sm bg-red-500 text-white ml-2">
+                      {unread}
+                    </span>
+                  )}
+                </div>
+                <div className="text-sm text-zinc-400 truncate">
                   {lastMsg
                     ? lastMsg.text
                       ? lastMsg.text
                       : lastMsg.image
                       ? "📷 Photo"
                       : ""
-                    : onlineUsers.includes(user._id)
-                    ? "Online"
-                    : "Offline"}
+                    : "No messages yet"}
                 </div>
               </div>
             </button>
           );
         })}
-
-        {filteredUsers.length === 0 && (
-          <div className="text-center text-zinc-500 py-4">No online users</div>
+        {filtered.length === 0 && (
+          <div className="text-center text-zinc-500 py-4">No chats yet</div>
         )}
       </div>
     </aside>

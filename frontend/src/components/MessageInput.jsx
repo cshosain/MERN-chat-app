@@ -8,9 +8,8 @@ const MessageInput = () => {
   const [text, setText] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
-  const { sendMessage } = useChatStore();
+  const { sendMessage, selectedConversation } = useChatStore();
   const { socket } = useAuthStore();
-  const { selectedUser } = useChatStore();
   let typingTimeout = useRef(null);
 
   const handleImageChange = (e) => {
@@ -19,11 +18,8 @@ const MessageInput = () => {
       toast.error("Please select an image file");
       return;
     }
-
     const reader = new FileReader();
-    reader.onloadend = () => {
-      setImagePreview(reader.result);
-    };
+    reader.onloadend = () => setImagePreview(reader.result);
     reader.readAsDataURL(file);
   };
 
@@ -38,26 +34,30 @@ const MessageInput = () => {
 
     try {
       await sendMessage({
+        conversationId: selectedConversation._id,
         text: text.trim(),
         image: imagePreview,
       });
-
-      // Clear form
       setText("");
-      setImagePreview(null);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    } catch (error) {
-      console.error("Failed to send message:", error);
+      removeImage();
+    } catch (err) {
+      console.error("Failed to send message:", err);
     }
   };
 
   const handleTyping = () => {
-    if (socket && selectedUser) {
-      socket.emit("typing", { receiverId: selectedUser._id });
+    if (socket && selectedConversation) {
+      socket.emit("typing:conversation", {
+        conversationId: selectedConversation._id,
+        participants: selectedConversation.participants.map((p) => p._id),
+      });
       clearTimeout(typingTimeout.current);
       typingTimeout.current = setTimeout(() => {
-        socket.emit("stopTyping", { receiverId: selectedUser._id });
-      }, 1500); // 1.5 seconds after last keypress
+        socket.emit("stopTyping:conversation", {
+          conversationId: selectedConversation._id,
+          participants: selectedConversation.participants.map((p) => p._id),
+        });
+      }, 1500);
     }
   };
 
@@ -73,8 +73,7 @@ const MessageInput = () => {
             />
             <button
               onClick={removeImage}
-              className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-base-300
-              flex items-center justify-center"
+              className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-base-300 flex items-center justify-center"
               type="button"
             >
               <X className="size-3" />
@@ -82,36 +81,33 @@ const MessageInput = () => {
           </div>
         </div>
       )}
-
       <form onSubmit={handleSendMessage} className="flex items-center gap-2">
-        <div className="flex-1 flex gap-2">
-          <input
-            type="text"
-            className="w-full input input-bordered rounded-lg input-sm sm:input-md"
-            placeholder="Type a message..."
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value);
-              handleTyping();
-            }}
-          />
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            ref={fileInputRef}
-            onChange={handleImageChange}
-          />
-
-          <button
-            type="button"
-            className={`hidden sm:flex btn btn-circle
-                     ${imagePreview ? "text-emerald-500" : "text-zinc-400"}`}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Image size={20} />
-          </button>
-        </div>
+        <input
+          type="text"
+          className="flex-1 input input-bordered rounded-lg input-sm sm:input-md"
+          placeholder="Type a message..."
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            handleTyping();
+          }}
+        />
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          ref={fileInputRef}
+          onChange={handleImageChange}
+        />
+        <button
+          type="button"
+          className={`hidden sm:flex btn btn-circle ${
+            imagePreview ? "text-emerald-500" : "text-zinc-400"
+          }`}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <Image size={20} />
+        </button>
         <button
           type="submit"
           className="btn btn-sm btn-circle"

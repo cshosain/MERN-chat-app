@@ -1,135 +1,108 @@
+// store/useChatStore.js
 import { create } from "zustand";
-import toast from "react-hot-toast";
 import { axiosInstance } from "../lib/axios";
 import { useAuthStore } from "./useAuthStore";
 
 export const useChatStore = create((set, get) => ({
+  conversations: [],
+  selectedConversation: null,
   messages: [],
-  users: [],
-  selectedUser: null,
-  isUsersLoading: false,
-  isMessagesLoading: false,
-  latestMessages: {},
+
+  getConversations: async () => {
+    const res = await axiosInstance.get("/conversations");
+    set({ conversations: res.data });
+  },
+
+  getMessages: async (conversationId) => {
+    const res = await axiosInstance.get(
+      `/conversations/${conversationId}/messages`
+    );
+    set({ messages: res.data });
+    // reset unread count when opening chat
+    set((s) => ({
+      conversations: s.conversations.map((c) =>
+        c._id === conversationId ? { ...c, unreadCount: 0 } : c
+      ),
+    }));
+    await axiosInstance.post(`/conversations/${conversationId}/mark-read`);
+  },
+
+  sendMessage: async ({ conversationId, text, image }) => {
+    const res = await axiosInstance.post(`/messages/send/${conversationId}`, {
+      text,
+      image,
+    });
+    const newMsg = res.data;
+
+    if (get().selectedConversation?._id === conversationId) {
+      set((s) => ({ messages: [...s.messages, newMsg] }));
+    }
+
+    set((s) => ({
+      conversations: s.conversations.map((c) =>
+        c._id === conversationId ? { ...c, lastMessage: newMsg } : c
+      ),
+    }));
+  },
 
   initSocketListeners: () => {
     const socket = useAuthStore.getState().socket;
-    console.log("initialSocketListener");
     if (!socket) return;
 
-    console.log("initialSocketListernr return");
-    socket?.off("newMessage"); // prevent duplicate listeners
-    socket?.on("newMessage", (newMessage) => {
-      console.log(newMessage);
-      const currentUserId = useAuthStore.getState().authUser._id;
-      const otherUserId =
-        newMessage.senderId === currentUserId
-          ? newMessage.receiverId
-          : newMessage.senderId;
-
-      // Always update sidebar last message
-      set((state) => ({
-        latestMessages: {
-          ...state.latestMessages,
-          [otherUserId]: newMessage,
-        },
-      }));
-
-      // Only push into chat messages if currently chatting
-      if (get().selectedUser?._id === otherUserId) {
-        set((state) => ({
-          messages: [...state.messages, newMessage],
+    socket.off("message:new");
+    socket.on("message:new", ({ conversationId, message }) => {
+      // If conversation is open, append & mark read
+      if (get().selectedConversation?._id === conversationId) {
+        set((s) => ({ messages: [...s.messages, message] }));
+        axiosInstance.post(`/conversations/${conversationId}/mark-read`);
+      } else {
+        // otherwise bump unread
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c._id === conversationId
+              ? {
+                  ...c,
+                  lastMessage: message,
+                  unreadCount: (c.unreadCount || 0) + 1,
+                }
+              : c
+          ),
         }));
       }
     });
+
+    socket.off("conversation:created");
+    socket.on("conversation:created", (conv) => {
+      set((s) => ({ conversations: [conv, ...s.conversations] }));
+    });
+
+    socket.off("conversation:updated");
+    socket.on("conversation:updated", ({ conversationId, lastMessage }) => {
+      set((s) => ({
+        conversations: s.conversations.map((c) =>
+          c._id === conversationId ? { ...c, lastMessage } : c
+        ),
+      }));
+    });
   },
+  // Add this function inside your create((set) => ({ ... })) block
 
-  getUsers: async () => {
-    set({ isUsersLoading: true });
-    try {
-      const res = await axiosInstance.get("/messages/users");
-      const users = res.data;
-
-      // Build initial latestMessages map
-      const latestMessages = {};
-      users.forEach((user) => {
-        if (user.lastMessage) {
-          latestMessages[user._id] = user.lastMessage;
+  addReaderToMessages: (conversationId, readerId) => {
+    set((state) => ({
+      messages: state.messages.map((message) => {
+        // Check if the message is in the correct conversation and the reader isn't already in the list
+        if (
+          message.conversationId === conversationId &&
+          !message.readBy.includes(readerId)
+        ) {
+          // Return a new message object with the updated 'readBy' array
+          return { ...message, readBy: [...message.readBy, readerId] };
         }
-      });
-
-      set({ users, latestMessages });
-    } catch (error) {
-      toast.error(error.response.data.message);
-    } finally {
-      set({ isUsersLoading: false });
-    }
+        // Otherwise, return the original message
+        return message;
+      }),
+    }));
   },
 
-  getMessages: async (userId) => {
-    set({ isMessagesLoading: true });
-    try {
-      const res = await axiosInstance.get(`/messages/${userId}`);
-      set({ messages: res.data });
-      if (res.data.length > 0) {
-        set((state) => ({
-          latestMessages: {
-            ...state.latestMessages,
-            [userId]: res.data[res.data.length - 1],
-          },
-        }));
-      }
-    } catch (error) {
-      toast.error(error.response.data.message);
-    } finally {
-      set({ isMessagesLoading: false });
-    }
-  },
-
-  sendMessage: async (messageData) => {
-    const { selectedUser, messages } = get();
-    try {
-      const res = await axiosInstance.post(
-        `/messages/send/${selectedUser._id}`,
-        messageData
-      );
-      set({ messages: [...messages, res.data] });
-    } catch (error) {
-      toast.error(error.response.data.message);
-    }
-  },
-  subscribeToMessages: () => {
-    const { selectedUser } = get();
-    if (!selectedUser) return;
-    const socket = useAuthStore.getState().socket;
-    socket.on("newMessage", (newMessage) => {
-      if (
-        newMessage.receiverId !== selectedUser._id &&
-        newMessage.senderId !== selectedUser._id
-      ) {
-        // Update latestMessages for the relevant user
-        set((state) => ({
-          latestMessages: {
-            ...state.latestMessages,
-            [newMessage.senderId === useAuthStore.getState().authUser._id
-              ? newMessage.receiverId
-              : newMessage.senderId]: newMessage,
-          },
-        }));
-        return;
-      }
-      set((state) => ({
-        messages: [...state.messages, newMessage],
-        latestMessages: {
-          ...state.latestMessages,
-          [selectedUser._id]: newMessage,
-        },
-      }));
-    });
-  },
-  unsubscribeFromMessages: () => {
-    const socket = useAuthStore.getState().socket;
-    socket.off("newMessage");
-  },
-
-  setSelectedUser: (selectedUser) => set({ selectedUser }),
+  setSelectedConversation: (c) => set({ selectedConversation: c }),
 }));
