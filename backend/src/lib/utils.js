@@ -14,20 +14,39 @@ export const generateToken = (userId, res) => {
   return token;
 };
 
+/** helpers */
+export const areFriends = (a, b) =>
+  a.friends?.some((id) => String(id) === String(b._id));
+export const isBlocked = (recipient, senderId) =>
+  recipient.blocked?.some((id) => String(id) === String(senderId));
+
+/** privacy gate for starting or sending DMs */
 export async function canMessage(senderId, recipientId) {
-  const sender = await User.findById(senderId);
-  const recipient = await User.findById(recipientId);
+  const [sender, recipient] = await Promise.all([
+    User.findById(senderId).lean(),
+    User.findById(recipientId).lean(),
+  ]);
+  if (!sender || !recipient) return false;
 
-  // blocked check
-  if (recipient.blocked?.some((b) => String(b) === String(senderId)))
-    return false;
+  // If recipient blocked sender => hard stop
+  if (isBlocked(recipient, senderId)) return false;
 
-  // friends check
-  const friends = sender.friends?.some(
-    (f) => String(f) === String(recipientId)
-  );
-  if (friends) return true;
+  const setting = recipient.settings?.allowDMsFrom || "friends";
+  if (setting === "no_one") return false;
+  if (setting === "everyone") return true;
 
-  // privacy settings check
-  return recipient.settings?.allowDMsFrom === "everyone";
+  // friends only
+  return areFriends(recipient, sender);
+}
+
+/** should we emit read receipts outward? */
+export async function shouldEmitReadReceipt(readerId) {
+  const u = await User.findById(readerId).lean();
+  return !!u?.settings?.readReceipts;
+}
+
+/** should we forward typing indicator to others? */
+export async function allowTypingFrom(userId) {
+  const u = await User.findById(userId).lean();
+  return !!u?.settings?.typingIndicators;
 }

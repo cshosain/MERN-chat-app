@@ -1,6 +1,9 @@
+import { useEffect } from "react";
 import { THEMES } from "../constants";
 import { useThemeStore } from "../store/useThemeStore";
 import { Send } from "lucide-react";
+import { axiosInstance } from "../lib/axios";
+import { useState } from "react";
 
 const PREVIEW_MESSAGES = [
   { id: 1, content: "Hey! How's it going?", isSent: false },
@@ -13,6 +16,30 @@ const PREVIEW_MESSAGES = [
 
 const SettingsPage = () => {
   const { theme, setTheme } = useThemeStore();
+  // Local UI state for privacy (later fetch from backend)
+  const [privacy, setPrivacy] = useState({
+    allowDMsFrom: "friends",
+    friendRequestsFrom: "anyone",
+    showOnlineStatus: true,
+    lastSeenVisible: true,
+    readReceipts: true,
+    typingIndicators: true,
+  });
+
+  const handlePrivacyChange = async (field, value) => {
+    setPrivacy((prev) => ({ ...prev, [field]: value }));
+    // Later call API: axios.put("/users/settings", { [field]: value });
+    await axiosInstance.patch("/auth/update-privacy", {
+      settings: { ...privacy, [field]: value },
+    });
+  };
+
+  // Load settings from backend
+  useEffect(() => {
+    axiosInstance.get("/auth/check").then((res) => {
+      setPrivacy(res.data?.settings);
+    });
+  }, []);
 
   return (
     <div className="h-screen container mx-auto px-4 pt-20 max-w-5xl">
@@ -126,6 +153,106 @@ const SettingsPage = () => {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+        {/* Privacy Section */}
+        {/* Privacy Section */}
+        <div>
+          <h2 className="text-lg font-semibold mb-2">Privacy</h2>
+          <p className="text-sm text-base-content/70 mb-4">
+            Control who can interact with you and what information they see
+          </p>
+
+          {/* Who can DM me */}
+          <div className="mb-4">
+            <label className="font-medium block">Who can message me</label>
+            <select
+              className="select select-bordered w-full mt-1"
+              value={privacy.allowDMsFrom}
+              onChange={(e) =>
+                handlePrivacyChange("allowDMsFrom", e.target.value)
+              }
+            >
+              <option value="everyone">Everyone</option>
+              <option value="friends">Friends only</option>
+              <option value="no_one">No one</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Control who can start a conversation with you.
+            </p>
+          </div>
+
+          {/* Who can send friend requests */}
+          <div className="mb-4">
+            <label className="font-medium block">
+              Who can send me friend requests
+            </label>
+            <select
+              className="select select-bordered w-full mt-1"
+              value={privacy.friendRequestsFrom}
+              onChange={(e) =>
+                handlePrivacyChange("friendRequestsFrom", e.target.value)
+              }
+            >
+              <option value="anyone">Anyone</option>
+              <option value="friends_of_friends">Friends of friends</option>
+              <option value="no_one">No one</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Choose who is allowed to send you friend requests.
+            </p>
+          </div>
+
+          {/* Online status */}
+          <div className="flex items-center justify-between mb-3">
+            <span>Show online status</span>
+            <input
+              type="checkbox"
+              className="toggle toggle-primary"
+              checked={privacy.showOnlineStatus}
+              onChange={(e) =>
+                handlePrivacyChange("showOnlineStatus", e.target.checked)
+              }
+            />
+          </div>
+
+          {/* Last seen */}
+          <div className="flex items-center justify-between mb-3">
+            <span>Show last seen</span>
+            <input
+              type="checkbox"
+              className="toggle toggle-primary"
+              checked={privacy.lastSeenVisible}
+              onChange={(e) =>
+                handlePrivacyChange("lastSeenVisible", e.target.checked)
+              }
+            />
+          </div>
+
+          {/* Read receipts */}
+          <div className="flex items-center justify-between mb-3">
+            <span>Read receipts</span>
+            <input
+              type="checkbox"
+              className="toggle toggle-primary"
+              checked={privacy.readReceipts}
+              onChange={(e) =>
+                handlePrivacyChange("readReceipts", e.target.checked)
+              }
+            />
+          </div>
+
+          {/* Typing indicators */}
+          <div className="flex items-center justify-between">
+            <span>Typing indicators</span>
+            <input
+              type="checkbox"
+              className="toggle toggle-primary"
+              checked={privacy.typingIndicators}
+              onChange={(e) =>
+                handlePrivacyChange("typingIndicators", e.target.checked)
+              }
+            />
           </div>
         </div>
       </div>

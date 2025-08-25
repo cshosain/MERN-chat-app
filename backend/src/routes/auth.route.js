@@ -4,6 +4,7 @@ import {
   login,
   logout,
   register,
+  updatePrivacy,
   updateProfile,
 } from "../controllers/auth.controller.js";
 import { protectRoute } from "../middlewares/auth.middleware.js";
@@ -14,5 +15,6 @@ router.post("/login", login);
 router.get("/logout", logout);
 router.patch("/update-profile", protectRoute, updateProfile);
 router.get("/check", protectRoute, checkAuth);
+router.patch("/update-privacy", protectRoute, updatePrivacy);
 
 export default router;

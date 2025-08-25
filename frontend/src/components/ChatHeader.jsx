@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
+import { formatLastSeen } from "../lib/utils";
 
 const ChatHeader = () => {
   const { authUser, onlineUsers } = useAuthStore();
@@ -14,6 +15,8 @@ const ChatHeader = () => {
     : null;
 
   const isOnline = otherUser ? onlineUsers.includes(otherUser._id) : false;
+  const lastSeen =
+    formatLastSeen(authUser?.lastSeenAt) || Date.now().toLocaleString();
 
   return (
     <div className="p-2.5 border-b border-base-300">
@@ -52,7 +55,7 @@ const ChatHeader = () => {
                 ? `${selectedConversation.participants.length} members`
                 : isOnline
                 ? "Online"
-                : "Offline"}
+                : lastSeen}
             </p>
           </div>
         </div>

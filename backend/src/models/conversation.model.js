@@ -1,21 +1,31 @@
-// models/conversation.model.js
 import mongoose from "mongoose";
+const { ObjectId } = mongoose.Schema.Types;
 
 const conversationSchema = new mongoose.Schema(
   {
-    participants: [
-      { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    ],
     isGroup: { type: Boolean, default: false },
-    lastMessage: { type: mongoose.Schema.Types.ObjectId, ref: "Message" },
-    unreadCounts: { type: Map, of: Number, default: {} },
+    participants: [{ type: ObjectId, ref: "User", required: true }],
 
-    // NEW: message-request support
-    isRequest: { type: Boolean, default: false },
-    requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // who initiated the request
+    // message request flow
+    status: {
+      type: String,
+      enum: ["active", "pending", "declined"],
+      default: "active",
+    },
+    requestedBy: { type: ObjectId, ref: "User" }, // for pending requests
+
+    lastMessage: { type: ObjectId, ref: "Message" },
+    // unread counts per user
+    unreadCounts: {
+      type: Map,
+      of: Number,
+      default: {},
+    },
   },
   { timestamps: true }
 );
+
+conversationSchema.index({ participants: 1 });
 
 const Conversation = mongoose.model("Conversation", conversationSchema);
 export default Conversation;

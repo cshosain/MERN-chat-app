@@ -3,8 +3,12 @@ import Conversation from "../models/conversation.model.js";
 import User from "../models/user.model.js";
 import cloudinary from "../lib/cloudinary.js";
 import { getReceiverSocketId, io } from "../lib/socket.js";
-import { canMessage } from "../lib/utils.js";
+import { canMessage, shouldEmitReadReceipt } from "../lib/utils.js";
 
+/**
+ * Send a message into a conversation.
+ * Handles privacy, pending requests, auto-accept if recipient replies.
+ */
 export const sendMessageToConversation = async (req, res) => {
   try {
     const { conversationId } = req.params;
@@ -19,36 +23,40 @@ export const sendMessageToConversation = async (req, res) => {
       return res.status(403).json({ message: "Not a participant" });
     }
 
-    // figure out the other user for 1-1
     const isOneToOne = !conv.isGroup && conv.participants.length === 2;
     const otherId = isOneToOne
       ? String(conv.participants.find((p) => String(p) !== String(senderId)))
       : undefined;
 
-    // Permissions:
-    // - If this is a regular (accepted) 1-1: must pass canMessage
-    // - If this is a request: allow the requester to send; if the recipient sends, auto-accept
-    if (isOneToOne) {
-      const allowed = await canMessage(senderId, otherId);
+    // 🔥 Privacy check must always run
+    const allowed = await canMessage(senderId, otherId);
+    if (!allowed && conv.status === "active") {
+      return res
+        .status(403)
+        .json({ message: "This person only accepts messages from friends" });
+    }
 
-      if (!conv.isRequest) {
-        if (!allowed) {
-          return res
-            .status(403)
-            .json({ message: "You cannot message this user" });
-        }
-      } else {
-        // it's a request thread
+    if (!allowed && conv.status === "pending") {
+      // If recipient has stricter settings, stop here too
+      return res
+        .status(403)
+        .json({ message: "This person didn’t receive your message" });
+    }
+
+    if (isOneToOne) {
+      if (conv.status === "pending") {
         const isRequester = String(conv.requestedBy) === String(senderId);
         if (!isRequester) {
-          // recipient is replying -> auto-accept the request
-          conv.isRequest = false;
+          // recipient replying → auto-accept
+          conv.status = "active";
           conv.requestedBy = undefined;
         }
+      } else if (conv.status === "declined") {
+        return res.status(403).json({ message: "Request was declined" });
       }
     }
 
-    // upload image if any
+    // Upload image if any
     let imageUrl;
     if (image) {
       const uploadedResponse = await cloudinary.uploader.upload(image, {
@@ -61,13 +69,13 @@ export const sendMessageToConversation = async (req, res) => {
     const newMessage = await Message.create({
       conversationId,
       senderId,
-      receiverId: otherId, // helpful for client-side UX
+      receiverId: otherId,
       text,
       image: imageUrl || null,
       readBy: [senderId],
     });
 
-    // update conversation lastMessage + unread
+    // Update conversation
     conv.lastMessage = newMessage._id;
     conv.participants.forEach((p) => {
       const key = String(p);
@@ -78,7 +86,7 @@ export const sendMessageToConversation = async (req, res) => {
     });
     await conv.save();
 
-    // emit to others
+    // Emit to others
     for (const p of conv.participants) {
       const uid = String(p);
       if (uid === String(senderId)) continue;
@@ -88,143 +96,134 @@ export const sendMessageToConversation = async (req, res) => {
         io.to(sid).emit("conversation:updated", {
           conversationId,
           lastMessage: newMessage,
-          isRequest: conv.isRequest,
+          status: conv.status,
         });
       }
     }
 
     res.status(201).json(newMessage);
   } catch (error) {
-    console.error(`Error: ${error.message}`);
+    console.error(`Error in sendMessageToConversation: ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
 };
-
-// List pending message requests for the current user
+/**
+ * NEW — list message requests (pending convs).
+ */
 export const listMessageRequests = async (req, res) => {
   try {
-    const userId = String(req.user._id);
-
-    const requests = await Conversation.find({
+    const me = req.user._id;
+    const incoming = await Conversation.find({
       isGroup: false,
-      isRequest: true,
-      participants: req.user._id, // the user is part of the pending thread
-    })
-      .populate("participants", "fullName profilePic")
-      .populate({
-        path: "lastMessage",
-        select: "text image createdAt senderId",
-      })
-      .sort({ updatedAt: -1 });
+      status: "pending",
+      participants: { $in: [me] },
+      requestedBy: { $ne: me },
+    }).populate("participants", "_id fullName profilePic");
 
-    // Optional: shape a preview field for easy UI
-    const shaped = requests.map((c) => {
-      const other = c.participants.find((u) => String(u._id) !== userId);
-      return {
-        _id: c._id,
-        isRequest: c.isRequest,
-        requestedBy: c.requestedBy,
-        otherUser: other,
-        lastMessage: c.lastMessage,
-        updatedAt: c.updatedAt,
-      };
-    });
+    const outgoing = await Conversation.find({
+      isGroup: false,
+      status: "pending",
+      requestedBy: me,
+    }).populate("participants", "_id fullName profilePic");
 
-    res.json(shaped);
+    res.json({ incoming, outgoing });
   } catch (e) {
-    console.error(e);
     res.status(500).json({ message: "Server error" });
   }
 };
 
-// Accept a message request (turn it into a normal conversation)
-export const acceptMessageRequest = async (req, res) => {
+/**
+ * NEW — accept a message request.
+ */
+export const acceptRequest = async (req, res) => {
   try {
-    const { conversationId } = req.params;
-    const userId = String(req.user._id);
+    const me = req.user._id;
+    const conv = await Conversation.findById(req.params.id);
+    if (!conv) return res.status(404).json({ message: "Not found" });
+    if (!conv.participants.some((p) => String(p) === String(me)))
+      return res.status(403).json({ message: "Forbidden" });
 
-    const conv = await Conversation.findById(conversationId);
-    if (!conv)
-      return res.status(404).json({ message: "Conversation not found" });
-
-    if (!conv.participants.some((p) => String(p) === userId)) {
-      return res.status(403).json({ message: "Not a participant" });
-    }
-    if (!conv.isRequest) {
-      return res
-        .status(400)
-        .json({ message: "Conversation is already accepted" });
-    }
-
-    conv.isRequest = false;
-    conv.requestedBy = undefined;
+    conv.status = "active";
     await conv.save();
 
-    // notify both sides
-    for (const p of conv.participants) {
+    conv.participants.forEach((p) => {
+      if (String(p) === String(me)) return;
       const sid = getReceiverSocketId(String(p));
-      if (sid) {
-        io.to(sid).emit("conversation:updated", {
-          conversationId: conv._id,
-          isRequest: false,
-          lastMessage: conv.lastMessage,
-        });
-      }
-    }
+      if (sid) io.to(sid).emit("conversation:accepted", conv);
+    });
 
     res.json(conv);
   } catch (e) {
-    console.error(e);
     res.status(500).json({ message: "Server error" });
   }
 };
 
-// Ignore a message request (delete the pending request thread)
-export const ignoreMessageRequest = async (req, res) => {
+/**
+ * NEW — decline a message request.
+ */
+export const declineRequest = async (req, res) => {
   try {
-    const { conversationId } = req.params;
-    const userId = String(req.user._id);
+    const me = req.user._id;
+    const conv = await Conversation.findById(req.params.id);
+    if (!conv) return res.status(404).json({ message: "Not found" });
+    if (!conv.participants.some((p) => String(p) === String(me)))
+      return res.status(403).json({ message: "Forbidden" });
 
-    const conv = await Conversation.findById(conversationId);
-    if (!conv)
-      return res.status(404).json({ message: "Conversation not found" });
+    conv.status = "declined";
+    await conv.save();
 
-    if (!conv.participants.some((p) => String(p) === userId)) {
-      return res.status(403).json({ message: "Not a participant" });
-    }
-    if (!conv.isRequest) {
-      return res.status(400).json({ message: "Conversation is not a request" });
-    }
-
-    // delete messages + the conversation
-    await Message.deleteMany({ conversationId: conv._id });
-    await conv.deleteOne();
-
-    // notify requester (if online)
-    const otherId = conv.participants.find((p) => String(p) !== userId);
-    const otherSid = getReceiverSocketId(String(otherId));
-    if (otherSid) {
-      io.to(otherSid).emit("conversation:deleted", { conversationId });
-    }
-
-    res.json({ success: true });
+    res.json({ ok: true });
   } catch (e) {
-    console.error(e);
     res.status(500).json({ message: "Server error" });
   }
 };
 
-// (Optional) keep your "by userId" getters for backward compatibility during migration
+export const reactToMessage = async (req, res) => {
+  const { messageId } = req.params;
+  const { type } = req.body; // "like"|"love"|...
+  const me = req.user._id;
+
+  const msg = await Message.findById(messageId);
+  if (!msg) return res.status(404).json({ message: "Not found" });
+
+  const conv = await Conversation.findById(msg.conversationId);
+  if (!conv.participants.some((p) => String(p) === String(me)))
+    return res.status(403).json({ message: "Forbidden" });
+
+  await Message.updateOne(
+    { _id: messageId, "reactions.userId": { $ne: me } },
+    { $push: { reactions: { userId: me, type } } }
+  );
+  await Message.updateOne(
+    { _id: messageId, "reactions.userId": me },
+    { $set: { "reactions.$.type": type } }
+  );
+
+  // notify others
+  conv.participants.forEach((p) => {
+    const uid = String(p);
+    if (uid === String(me)) return;
+    const sid = getReceiverSocketId(uid);
+    if (sid) io.to(sid).emit("message:reaction", { messageId, by: me, type });
+  });
+
+  res.json({ ok: true });
+};
+/**
+ * (Legacy) get all messages between 2 users directly by userId.
+ */
 export const getMessagesByUserLegacy = async (req, res) => {
   try {
     const { id: userToChatId } = req.params;
-    const loggedInUserId = req.user._id;
+    const me = req.user._id;
+
     const messages = await Message.find({
       $or: [
-        { senderId: loggedInUserId, receiverId: userToChatId },
-        { senderId: userToChatId, receiverId: loggedInUserId },
+        { senderId: me, receiverId: userToChatId },
+        { senderId: userToChatId, receiverId: me },
       ],
     }).sort({ createdAt: 1 });
+
     res.status(200).json(messages);
   } catch (e) {
     res.status(500).json({ message: "Server error" });

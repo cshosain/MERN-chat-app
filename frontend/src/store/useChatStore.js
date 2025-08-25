@@ -2,6 +2,7 @@
 import { create } from "zustand";
 import { axiosInstance } from "../lib/axios";
 import { useAuthStore } from "./useAuthStore";
+import toast from "react-hot-toast";
 
 export const useChatStore = create((set, get) => ({
   conversations: [],
@@ -15,8 +16,9 @@ export const useChatStore = create((set, get) => ({
 
   getMessages: async (conversationId) => {
     const res = await axiosInstance.get(
-      `/conversations/${conversationId}/messages`
+      `/conversations/by-conversation/${conversationId}`
     );
+    console.log(conversationId);
     set({ messages: res.data });
     // reset unread count when opening chat
     set((s) => ({
@@ -24,39 +26,42 @@ export const useChatStore = create((set, get) => ({
         c._id === conversationId ? { ...c, unreadCount: 0 } : c
       ),
     }));
-    await axiosInstance.post(`/conversations/${conversationId}/mark-read`);
+    await axiosInstance.post(`/conversations/read/${conversationId}`);
   },
 
   sendMessage: async ({ conversationId, text, image }) => {
-    const res = await axiosInstance.post(`/messages/send/${conversationId}`, {
-      text,
-      image,
-    });
-    const newMsg = res.data;
+    try {
+      const res = await axiosInstance.post(`/messages/send/${conversationId}`, {
+        text,
+        image,
+      });
+      const newMsg = res.data;
 
-    if (get().selectedConversation?._id === conversationId) {
-      set((s) => ({ messages: [...s.messages, newMsg] }));
+      if (get().selectedConversation?._id === conversationId) {
+        set((s) => ({ messages: [...s.messages, newMsg] }));
+      }
+
+      set((s) => ({
+        conversations: s.conversations.map((c) =>
+          c._id === conversationId ? { ...c, lastMessage: newMsg } : c
+        ),
+      }));
+    } catch (error) {
+      toast.error(error.response.data.message);
     }
-
-    set((s) => ({
-      conversations: s.conversations.map((c) =>
-        c._id === conversationId ? { ...c, lastMessage: newMsg } : c
-      ),
-    }));
   },
 
   initSocketListeners: () => {
     const socket = useAuthStore.getState().socket;
     if (!socket) return;
 
+    // new message
     socket.off("message:new");
     socket.on("message:new", ({ conversationId, message }) => {
-      // If conversation is open, append & mark read
       if (get().selectedConversation?._id === conversationId) {
         set((s) => ({ messages: [...s.messages, message] }));
-        axiosInstance.post(`/conversations/${conversationId}/mark-read`);
+        axiosInstance.post(`/messages/read/${conversationId}`);
       } else {
-        // otherwise bump unread
         set((s) => ({
           conversations: s.conversations.map((c) =>
             c._id === conversationId
@@ -71,17 +76,52 @@ export const useChatStore = create((set, get) => ({
       }
     });
 
-    socket.off("conversation:created");
-    socket.on("conversation:created", (conv) => {
-      set((s) => ({ conversations: [conv, ...s.conversations] }));
-    });
-
+    // update conversation
     socket.off("conversation:updated");
-    socket.on("conversation:updated", ({ conversationId, lastMessage }) => {
+    socket.on(
+      "conversation:updated",
+      ({ conversationId, lastMessage, status }) => {
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c._id === conversationId ? { ...c, lastMessage, status } : c
+          ),
+        }));
+      }
+    );
+
+    // 🔥 Reaction listener
+    socket.off("message:reaction");
+    socket.on("message:reaction", ({ messageId, by, type }) => {
       set((s) => ({
-        conversations: s.conversations.map((c) =>
-          c._id === conversationId ? { ...c, lastMessage } : c
-        ),
+        messages: s.messages.map((msg) => {
+          if (msg._id !== messageId) return msg;
+
+          const existing = msg.reactions.find((r) => r.userId === by);
+
+          if (!type) {
+            // reaction removed
+            return {
+              ...msg,
+              reactions: msg.reactions.filter((r) => r.userId !== by),
+            };
+          }
+
+          if (existing) {
+            // update reaction
+            return {
+              ...msg,
+              reactions: msg.reactions.map((r) =>
+                r.userId === by ? { ...r, type } : r
+              ),
+            };
+          } else {
+            // add new reaction
+            return {
+              ...msg,
+              reactions: [...msg.reactions, { userId: by, type }],
+            };
+          }
+        }),
       }));
     });
   },

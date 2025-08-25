@@ -1,15 +1,18 @@
-import { canMessage } from "../lib/utils.js";
+import { canMessage, shouldEmitReadReceipt } from "../lib/utils.js";
 import Conversation from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
 import User from "../models/user.model.js";
 import { getReceiverSocketId, io, onlineUsers } from "../lib/socket.js";
 
+/**
+ * Sidebar: list conversations for a user (active only).
+ */
 export const getConversationsForSidebar = async (req, res) => {
   try {
     const userId = req.user._id;
 
     const convs = await Conversation.aggregate([
-      { $match: { participants: userId } },
+      { $match: { participants: userId, status: "active" } },
       {
         $lookup: {
           from: "messages",
@@ -22,12 +25,11 @@ export const getConversationsForSidebar = async (req, res) => {
       { $sort: { "lastMessage.createdAt": -1, updatedAt: -1 } },
     ]);
 
-    // Hydrate participants minimal info
     const participantIds = [
       ...new Set(convs.flatMap((c) => c.participants.map(String))),
     ];
     const users = await User.find({ _id: { $in: participantIds } }).select(
-      "_id fullName profilePic"
+      "_id fullName profilePic settings"
     );
     const userMap = new Map(users.map((u) => [String(u._id), u]));
 
@@ -48,17 +50,17 @@ export const getConversationsForSidebar = async (req, res) => {
   }
 };
 
-// 1-1 only
+/**
+ * 1-1 DM: start or get existing.
+ * Respects privacy — may create a pending request instead of active conversation.
+ */
 export const startOrGetOneToOne = async (req, res) => {
   try {
     const me = req.user._id;
     const { userId } = req.params;
 
-    // Privacy: only friends can chat (or check allowDMsFrom)
-    const meDoc = await User.findById(me);
-    const areFriends = meDoc.friends?.some((f) => String(f) === String(userId));
-    if (!areFriends && meDoc.settings?.allowDMsFrom !== "everyone") {
-      return res.status(403).json({ message: "You can only message friends" });
+    if (String(me) === String(userId)) {
+      return res.status(400).json({ message: "Cannot chat with yourself" });
     }
 
     let conv = await Conversation.findOne({
@@ -66,25 +68,23 @@ export const startOrGetOneToOne = async (req, res) => {
       participants: { $all: [me, userId], $size: 2 },
     });
 
-    if (!conv) {
-      conv = await Conversation.create({
-        isGroup: false,
-        participants: [me, userId],
-        unreadCounts: { [String(me)]: 0, [String(userId)]: 0 },
-      });
-    }
+    if (conv) return res.json(conv);
 
-    // for 1-1, ensure permissions
-    if (!conv.isGroup) {
-      const recipientId = conv?.participants.find(
-        (p) => String(p) !== String(senderId)
-      );
-      const allowed = await canMessage(senderId, recipientId);
-      if (!allowed) {
-        return res
-          .status(403)
-          .json({ message: "You cannot message this user" });
-      }
+    // Check privacy
+    const allowed = await canMessage(me, userId);
+
+    conv = await Conversation.create({
+      isGroup: false,
+      participants: [me, userId],
+      status: allowed ? "active" : "pending",
+      requestedBy: allowed ? undefined : me,
+      unreadCounts: { [String(me)]: 0, [String(userId)]: 0 },
+    });
+
+    // If pending, notify recipient
+    if (!allowed) {
+      const sid = getReceiverSocketId(String(userId));
+      if (sid) io.to(sid).emit("conversation:request", conv);
     }
 
     res.json(conv);
@@ -93,14 +93,18 @@ export const startOrGetOneToOne = async (req, res) => {
   }
 };
 
-// incl. group chat
-
+/**
+ * Explicit conversation creation (for friend suggestions or manual start).
+ */
 export const startConversation = async (req, res) => {
   try {
     const me = req.user._id;
     const other = req.params.otherUserId;
 
-    // Reuse existing 1-1 if present
+    if (String(me) === String(other)) {
+      return res.status(400).json({ message: "Cannot chat with yourself" });
+    }
+
     let conv = await Conversation.findOne({
       isGroup: false,
       participants: { $all: [me, other], $size: 2 },
@@ -111,22 +115,31 @@ export const startConversation = async (req, res) => {
       conv = await Conversation.create({
         participants: [me, other],
         isGroup: false,
-        isRequest: !allowed,
-        requestedBy: !allowed ? me : undefined,
+        status: allowed ? "active" : "pending",
+        requestedBy: allowed ? undefined : me,
+        unreadCounts: { [String(me)]: 0, [String(other)]: 0 },
       });
 
-      // notify the other user a request arrived
+      // notify other user
       const sid = getReceiverSocketId(String(other));
-      if (sid) io.to(sid).emit("conversation:created", conv);
+      if (sid) {
+        io.to(sid).emit(
+          allowed ? "conversation:created" : "conversation:request",
+          conv
+        );
+      }
     }
 
-    res.json(conv);
+    return res.json(conv);
   } catch (e) {
     console.error(e);
     res.status(500).json({ message: "Server error" });
   }
 };
 
+/**
+ * Fetch all messages in a conversation.
+ */
 export const getMessagesByConversation = async (req, res) => {
   try {
     const { id: conversationId } = req.params;
@@ -146,50 +159,43 @@ export const getMessagesByConversation = async (req, res) => {
   }
 };
 
+/**
+ * Mark conversation as read.
+ * Respects readReceipts privacy before emitting.
+ */
 export const markConversationRead = async (req, res) => {
   try {
-    const { id: conversationId } = req.params;
-    const userId = req.user._id; // This is the user who is reading the messages
+    const { conversationId } = req.params;
+    const userId = req.user._id;
 
     const conv = await Conversation.findById(conversationId);
     if (!conv || !conv.participants.some((p) => p.equals(userId))) {
       return res.status(403).json({ message: "Not a participant" });
     }
 
-    // 1. Reset unread count for the current user
     conv.unreadCounts.set(String(userId), 0);
     await conv.save();
 
-    // 2. Mark relevant messages as read by adding the user's ID to the 'readBy' array
-    const updateResult = await Message.updateMany(
+    await Message.updateMany(
       { conversationId, readBy: { $ne: userId } },
-      { $push: { readBy: userId } }
+      { $addToSet: { readBy: userId } }
     );
 
-    // If no messages were updated, we don't need to send a notification
-    if (updateResult.nModified === 0 && updateResult.modifiedCount === 0) {
-      return res.json({
-        ok: true,
-        message: "No new messages to mark as read.",
+    const canEmit = await shouldEmitReadReceipt(userId);
+    if (canEmit) {
+      const otherParticipants = conv.participants.filter(
+        (p) => !p.equals(userId)
+      );
+      otherParticipants.forEach((participantId) => {
+        const sid = onlineUsers[participantId.toString()];
+        if (sid) {
+          io.to(sid).emit("conversation:read", {
+            conversationId,
+            readerId: userId.toString(),
+          });
+        }
       });
     }
-
-    // 3. Notify all OTHER participants that this user has read the messages
-    const otherParticipants = conv.participants.filter(
-      (p) => !p.equals(userId)
-    );
-
-    otherParticipants.forEach((participantId) => {
-      // Find the socket ID of the other participant
-      const participantSocketId = onlineUsers[participantId.toString()];
-      if (participantSocketId) {
-        // Emit an event with the conversation ID and the ID of the user who just read it
-        io.to(participantSocketId).emit("conversation:read", {
-          conversationId,
-          readerId: userId.toString(),
-        });
-      }
-    });
 
     res.json({ ok: true });
   } catch (e) {

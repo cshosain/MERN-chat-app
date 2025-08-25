@@ -6,9 +6,11 @@ import { io } from "../lib/socket.js";
 export const friendSuggestions = async (req, res) => {
   const me = req.user._id;
 
-  // exclude self, already friends, already requested
+  // exclude self, already friends
   const user = await User.findById(me).populate("friends");
   const friendIds = user.friends.map((f) => f._id);
+
+  // pending outgoing/incoming
   const outgoing = await FriendRequest.find({
     requester: me,
     status: "pending",
@@ -18,30 +20,97 @@ export const friendSuggestions = async (req, res) => {
     status: "pending",
   }).distinct("requester");
 
-  const exclude = [me, ...friendIds, ...outgoing, ...incoming];
+  const exclude = [me, ...friendIds];
 
   const suggestions = await User.find({ _id: { $nin: exclude } })
     .select("fullName username profilePic")
-    .limit(10);
+    .limit(10)
+    .lean();
 
-  res.json(suggestions);
+  // annotate each suggestion with status
+  const enriched = suggestions.map((s) => {
+    if (outgoing.some((id) => String(id) === String(s._id))) {
+      return { ...s, friendshipStatus: "outgoing" };
+    }
+    if (incoming.some((id) => String(id) === String(s._id))) {
+      return { ...s, friendshipStatus: "incoming" };
+    }
+    return { ...s, friendshipStatus: "none" };
+  });
+
+  res.json(enriched);
 };
 
 export const sendFriendRequest = async (req, res) => {
   try {
     const requester = req.user._id;
     const { userId: recipient } = req.params;
+
     if (String(requester) === String(recipient)) {
       return res.status(400).json({ message: "Cannot friend yourself" });
     }
 
+    // Check if already friends
     const alreadyFriends = await User.exists({
       _id: requester,
       friends: recipient,
     });
-    if (alreadyFriends)
+    if (alreadyFriends) {
       return res.status(400).json({ message: "Already friends" });
+    }
 
+    // 1. Check if reverse request exists (recipient → requester)
+    const reverse = await FriendRequest.findOne({
+      requester: recipient,
+      recipient: requester,
+      status: "pending",
+    });
+
+    if (reverse) {
+      // Auto-accept the reverse request
+      reverse.status = "accepted";
+      await reverse.save();
+
+      await User.findByIdAndUpdate(requester, {
+        $addToSet: { friends: recipient },
+      });
+      await User.findByIdAndUpdate(recipient, {
+        $addToSet: { friends: requester },
+      });
+
+      // ensure conversation exists
+      let conversation = await Conversation.findOne({
+        isGroup: false,
+        participants: { $all: [requester, recipient], $size: 2 },
+      });
+      if (!conversation) {
+        conversation = await Conversation.create({
+          participants: [requester, recipient],
+          isGroup: false,
+          unreadCounts: {
+            [String(requester)]: 0,
+            [String(recipient)]: 0,
+          },
+        });
+      }
+
+      io.to(/* recipient socket */).emit("friend:accepted", {
+        userId: requester,
+        conversationId: conversation._id,
+      });
+      io.to(/* requester socket */).emit("friend:accepted", {
+        userId: recipient,
+        conversationId: conversation._id,
+      });
+
+      return res.status(200).json({
+        message: "Friend request auto-accepted",
+        friendshipStatus: "friends",
+        conversationId: conversation._id,
+      });
+    }
+
+    // 2. Otherwise, send a new request (if not already outgoing)
     const fr = await FriendRequest.findOneAndUpdate(
       { requester, recipient },
       { $setOnInsert: { requester, recipient, status: "pending" } },
@@ -54,8 +123,13 @@ export const sendFriendRequest = async (req, res) => {
       requestId: fr._id,
     });
 
-    res.status(201).json(fr);
+    res.status(201).json({
+      message: "Friend request sent",
+      friendshipStatus: "outgoing",
+      requestId: fr._id,
+    });
   } catch (e) {
+    console.error("Error in sendFriendRequest:", e);
     res.status(500).json({ message: "Server error" });
   }
 };

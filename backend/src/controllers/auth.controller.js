@@ -125,3 +125,21 @@ export const checkAuth = (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
+export const updatePrivacy = async (req, res) => {
+  try {
+    const { settings } = req.body; // { allowDMsFrom, friendRequestsFrom, showOnlineStatus, ... }
+    if (!settings)
+      return res.status(400).json({ message: "settings required" });
+
+    const updated = await User.findByIdAndUpdate(
+      req.user._id,
+      { settings },
+      { new: true }
+    ).select("-password");
+
+    res.json(updated);
+  } catch (e) {
+    res.status(500).json({ message: "Failed to update privacy" });
+  }
+};

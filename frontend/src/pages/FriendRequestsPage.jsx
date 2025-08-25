@@ -36,7 +36,7 @@ const FriendRequestsPage = () => {
 
   const handleReject = async (id) => {
     try {
-      await axiosInstance.post(`/friends/reject/${id}`, { action: "reject" });
+      await axiosInstance.post(`/friends/respond/${id}`, { action: "reject" });
       setIncoming((reqs) => reqs.filter((r) => r._id !== id));
       toast.success("Friend request rejected");
     } catch (err) {

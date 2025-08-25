@@ -80,6 +80,7 @@ export const useAuthStore = create((set, get) => ({
       set({ isUpdatingProfile: false });
     }
   },
+
   connectSocket: () => {
     const { authUser } = get();
     if (!authUser || get().socket?.connected) {
@@ -99,6 +100,25 @@ export const useAuthStore = create((set, get) => ({
       set({ onlineUsers: userIds });
     });
   },
+
+  updatePrivacy: async (settings) => {
+    try {
+      const res = await axiosInstance.patch("/auth/update-privacy", {
+        settings,
+      });
+      // server returns updated user
+      // keep socket connected
+      const { socket } = get();
+      set({ authUser: res.data });
+      if (socket?.connected) {
+        // no-op; server will start respecting new prefs on next connect,
+        // or you can re-connect to apply immediately
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  },
+
   disconnectSocket: () => {
     const { socket } = get();
     if (socket?.connected) {

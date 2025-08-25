@@ -50,7 +50,9 @@ export const useFriendStore = create((set, get) => ({
   },
 
   acceptRequest: async (requestId) => {
-    await axiosInstance.post(`/friends/request/${requestId}/accept`);
+    await axiosInstance.post(`/friends/respond/${requestId}`, {
+      action: "accept",
+    });
     set((s) => ({
       requests: s.requests.filter((r) => r._id !== requestId),
     }));
@@ -58,7 +60,9 @@ export const useFriendStore = create((set, get) => ({
   },
 
   rejectRequest: async (requestId) => {
-    await axiosInstance.post(`/friends/request/${requestId}/reject`);
+    await axiosInstance.post(`/friends/respond/${requestId}`, {
+      action: "reject",
+    });
     set((s) => ({
       requests: s.requests.filter((r) => r._id !== requestId),
     }));
