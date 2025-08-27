@@ -8,6 +8,7 @@ export const useChatStore = create((set, get) => ({
   conversations: [],
   selectedConversation: null,
   messages: [],
+  lastSeen: new Date(),
 
   getConversations: async () => {
     const res = await axiosInstance.get("/conversations");
@@ -27,6 +28,17 @@ export const useChatStore = create((set, get) => ({
       ),
     }));
     await axiosInstance.post(`/conversations/read/${conversationId}`);
+  },
+
+  getLastSeenByUserId: async (otherUserId) => {
+    try {
+      const res = await axiosInstance.get(
+        `/conversations/last-seen/${otherUserId}`
+      );
+      set({ lastSeen: res.data.lastSeen.lastSeenAt });
+    } catch (error) {
+      console.log(error);
+    }
   },
 
   sendMessage: async ({ conversationId, text, image }) => {
@@ -60,7 +72,7 @@ export const useChatStore = create((set, get) => ({
     socket.on("message:new", ({ conversationId, message }) => {
       if (get().selectedConversation?._id === conversationId) {
         set((s) => ({ messages: [...s.messages, message] }));
-        axiosInstance.post(`/messages/read/${conversationId}`);
+        axiosInstance.post(`/conversations/read/${conversationId}`);
       } else {
         set((s) => ({
           conversations: s.conversations.map((c) =>

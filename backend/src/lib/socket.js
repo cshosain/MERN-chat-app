@@ -27,26 +27,45 @@ export function emitToUsers(userIds, event, payload) {
   });
 }
 
-async function broadcastOnline() {
-  // Only include users who allow being seen online
-  const visible = Object.keys(onlineUsers).filter(
-    (uid) => userPrefs[uid]?.showOnlineStatus
-  );
+export async function broadcastOnline(
+  updatedUserId = "",
+  updatedOnlineStatus = true
+) {
+  let visible = [];
+  if (updatedUserId && !updatedOnlineStatus) {
+    // Only include users who allow being seen online
+    visible = Object.keys(onlineUsers).filter((uid) => uid != updatedUserId);
+  } else if (updatedUserId && updatedOnlineStatus) {
+    //something
+    visible = [...Object.keys(onlineUsers), updatedUserId];
+  } else {
+    // Only include users who allow being seen online
+    visible = Object.keys(onlineUsers).filter(
+      (uid) => userPrefs[uid]?.showOnlineStatus
+    );
+  }
   io.emit("getOnlineUsers", visible);
 }
 
 io.on("connection", async (socket) => {
   const userId = socket.handshake.query.userId;
+  let userDataCopy;
   if (userId) {
-    onlineUsers[userId] = socket.id;
-    // cache privacy prefs
-    const u = await User.findById(userId).lean();
+    const u = await User.findById(userId);
+    userDataCopy = u;
+    if (u?.settings?.showOnlineStatus) {
+      onlineUsers[userId] = socket.id;
+    }
     userPrefs[userId] = {
       showOnlineStatus: !!u?.settings?.showOnlineStatus,
       typingIndicators: !!u?.settings?.typingIndicators,
     };
   }
-  await broadcastOnline();
+  //pass initial showOnlineStatus from as it was in db.
+  await broadcastOnline(
+    userDataCopy?._id.toString(),
+    userDataCopy?.settings?.showOnlineStatus
+  );
 
   socket.on(
     "typing:conversation",

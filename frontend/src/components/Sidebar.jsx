@@ -20,10 +20,6 @@ const Sidebar = () => {
     getConversations();
   }, [getConversations]);
 
-  useEffect(() => {
-    console.log(selectedConversation);
-  }, [selectedConversation]);
-
   // filter if "online only" checked (works only for 1-1 convos)
   const filtered = showOnlineOnly
     ? conversations.filter((c) => {
@@ -57,7 +53,7 @@ const Sidebar = () => {
             <span className="text-sm">Show online only</span>
           </label>
           <span className="text-xs text-zinc-500">
-            ({onlineUsers.length - 1} online)
+            ({new Set(onlineUsers).size - 1} online)
           </span>
         </div>
       </div>

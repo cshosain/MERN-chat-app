@@ -2,6 +2,7 @@ import { generateToken } from "../lib/utils.js";
 import User from "../models/user.model.js";
 import bcrypt from "bcryptjs";
 import cloudinary from "../lib/cloudinary.js";
+import { broadcastOnline } from "../lib/socket.js";
 
 export const register = async (req, res) => {
   const { fullName, email, password, profilePic } = req.body;
@@ -137,7 +138,11 @@ export const updatePrivacy = async (req, res) => {
       { settings },
       { new: true }
     ).select("-password");
-
+    //to do optimize only for online status change
+    await broadcastOnline(
+      updated?._id.toString(),
+      updated?.settings?.showOnlineStatus
+    );
     res.json(updated);
   } catch (e) {
     res.status(500).json({ message: "Failed to update privacy" });

@@ -189,7 +189,7 @@ export const markConversationRead = async (req, res) => {
       otherParticipants.forEach((participantId) => {
         const sid = onlineUsers[participantId.toString()];
         if (sid) {
-          io.to(sid).emit("conversation:read", {
+          io.to(sid).emit("message:read", {
             conversationId,
             readerId: userId.toString(),
           });
@@ -201,5 +201,17 @@ export const markConversationRead = async (req, res) => {
   } catch (e) {
     console.error("Error in markConversationRead:", e);
     res.status(500).json({ message: "Server error" });
+  }
+};
+
+//get last seen info.
+export const getLastSeen = async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const lastSeen = await User.findById(userId).select("lastSeenAt");
+    if (!lastSeen) return res.status(404).json({ message: "User not found" });
+    return res.status(200).json({ lastSeen });
+  } catch (error) {
+    return res.status(500).json({ message: "Server Error" });
   }
 };

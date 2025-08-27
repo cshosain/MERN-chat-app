@@ -5,6 +5,7 @@ import {
   getConversationsForSidebar,
   getMessagesByConversation,
   markConversationRead,
+  getLastSeen,
 } from "../controllers/conversation.controller.js";
 
 const router = express.Router();
@@ -13,5 +14,6 @@ router.get("/", protectRoute, getConversationsForSidebar);
 router.post("/start/:otherUserId", protectRoute, startConversation);
 router.get("/by-conversation/:id", protectRoute, getMessagesByConversation);
 router.post("/read/:conversationId", protectRoute, markConversationRead);
+router.get("/last-seen/:userId", protectRoute, getLastSeen);
 
 export default router;

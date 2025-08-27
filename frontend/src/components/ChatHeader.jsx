@@ -2,21 +2,25 @@ import { X } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 import { formatLastSeen } from "../lib/utils";
+import { useEffect } from "react";
 
 const ChatHeader = () => {
   const { authUser, onlineUsers } = useAuthStore();
   const { selectedConversation, setSelectedConversation } = useChatStore();
-
-  if (!selectedConversation) return null;
-
+  const { lastSeen, getLastSeenByUserId } = useChatStore();
   // For 1-1 chats, find the other participant
   const otherUser = !selectedConversation.isGroup
     ? selectedConversation.participants.find((p) => p._id !== authUser._id)
     : null;
 
   const isOnline = otherUser ? onlineUsers.includes(otherUser._id) : false;
-  const lastSeen =
-    formatLastSeen(authUser?.lastSeenAt) || Date.now().toLocaleString();
+
+  useEffect(() => {
+    getLastSeenByUserId(otherUser._id);
+  }, [otherUser._id, getLastSeenByUserId]);
+
+  if (!selectedConversation) return null;
+  const formattedLastSeen = formatLastSeen(lastSeen) || "Unspecified";
 
   return (
     <div className="p-2.5 border-b border-base-300">
@@ -55,7 +59,7 @@ const ChatHeader = () => {
                 ? `${selectedConversation.participants.length} members`
                 : isOnline
                 ? "Online"
-                : lastSeen}
+                : formattedLastSeen}
             </p>
           </div>
         </div>

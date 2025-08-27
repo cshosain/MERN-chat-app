@@ -33,7 +33,6 @@ const ChatContainer = () => {
   const typingRef = useRef(null);
   const pickerRef = useRef(null);
   const [isTyping, setIsTyping] = useState(false);
-  console.log(messages);
 
   // Reaction UI state
   const [reactionTarget, setReactionTarget] = useState(null);
@@ -103,7 +102,7 @@ const ChatContainer = () => {
     };
     socket.on("message:read", handleConversationRead);
     return () => socket.off("message:read", handleConversationRead);
-  }, [socket, selectedConversation?._id, addReaderToMessages]);
+  }, [socket, selectedConversation?._id, addReaderToMessages, messages]);
 
   // Reaction picker outside click
   useEffect(() => {
