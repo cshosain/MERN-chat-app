@@ -6,21 +6,41 @@ import { useEffect } from "react";
 
 const ChatHeader = () => {
   const { authUser, onlineUsers } = useAuthStore();
-  const { selectedConversation, setSelectedConversation } = useChatStore();
-  const { lastSeen, getLastSeenByUserId } = useChatStore();
+  const {
+    selectedConversation,
+    setSelectedConversation,
+    lastSeen,
+    getLastSeenByUserId,
+  } = useChatStore();
   // For 1-1 chats, find the other participant
+  console.log("authUser:", authUser);
   const otherUser = !selectedConversation.isGroup
     ? selectedConversation.participants.find((p) => p._id !== authUser._id)
     : null;
 
   const isOnline = otherUser ? onlineUsers.includes(otherUser._id) : false;
+  console.log("otherUser:", otherUser);
 
   useEffect(() => {
-    getLastSeenByUserId(otherUser._id);
-  }, [otherUser._id, getLastSeenByUserId]);
+    if (
+      authUser &&
+      authUser.settings.lastSeenVisible &&
+      otherUser &&
+      otherUser.settings.lastSeenVisible
+    ) {
+      console.log("Fetching last seen for user:", otherUser._id);
+      getLastSeenByUserId(otherUser._id);
+    }
+  }, [otherUser._id, getLastSeenByUserId, authUser, otherUser]);
 
   if (!selectedConversation) return null;
-  const formattedLastSeen = formatLastSeen(lastSeen) || "Unspecified";
+  const formattedLastSeen =
+    authUser &&
+    authUser.settings.lastSeenVisible &&
+    otherUser &&
+    otherUser.settings.lastSeenVisible
+      ? formatLastSeen(lastSeen)
+      : "Last seen is hidden";
 
   return (
     <div className="p-2.5 border-b border-base-300">
