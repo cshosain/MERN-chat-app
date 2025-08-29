@@ -53,6 +53,7 @@ const ChatContainer = () => {
     }
   }, [messages]);
 
+  // Scroll to typing indicator
   useEffect(() => {
     if (typingRef.current) {
       typingRef.current.scrollIntoView({ behavior: "smooth" });
@@ -76,8 +77,10 @@ const ChatContainer = () => {
       )
         setIsTyping(false);
     };
-    socket.on("typing:conversation", handleTyping);
-    socket.on("stopTyping:conversation", handleStopTyping);
+    if (useAuthStore.getState().authUser.settings.typingIndicators) {
+      socket.on("typing:conversation", handleTyping);
+      socket.on("stopTyping:conversation", handleStopTyping);
+    }
     return () => {
       socket.off("typing:conversation", handleTyping);
       socket.off("stopTyping:conversation", handleStopTyping);
@@ -211,11 +214,30 @@ const ChatContainer = () => {
                 <span className="text-[10px] mt-1 opacity-60 self-end">
                   {formatMessageTime(message.createdAt)} ·{" "}
                   {message.senderId === authUser._id
-                    ? message.readBy?.length > 1
-                      ? "✓✓ Seen"
-                      : message.readBy?.includes(authUser._id)
-                      ? "✓✓ Delivered"
-                      : "✓ Sent"
+                    ? (() => {
+                        // determine other user id for 1-1
+                        const otherId = selectedConversation.isGroup
+                          ? null
+                          : selectedConversation.participants.find(
+                              (p) => p._id !== authUser._id
+                            )?._id;
+
+                        if (
+                          otherId &&
+                          message.readBy?.map(String).includes(String(otherId))
+                        ) {
+                          return "✓✓ Seen";
+                        }
+                        if (
+                          otherId &&
+                          message.deliveredTo
+                            ?.map(String)
+                            .includes(String(otherId))
+                        ) {
+                          return "✓✓ Delivered";
+                        }
+                        return "✓ Sent";
+                      })()
                     : ""}
                 </span>
 

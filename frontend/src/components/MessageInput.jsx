@@ -46,7 +46,16 @@ const MessageInput = () => {
   };
 
   const handleTyping = () => {
-    if (socket && selectedConversation) {
+    //when authUser.settings.showTypingIndicator is true, then only emit typing event
+    console.log(
+      "Typing indicator setting:",
+      useAuthStore.getState().authUser.settings.typingIndicators
+    );
+    if (
+      socket &&
+      selectedConversation &&
+      useAuthStore.getState().authUser.settings.typingIndicators
+    ) {
       socket.emit("typing:conversation", {
         conversationId: selectedConversation._id,
         participants: selectedConversation.participants.map((p) => p._id),
