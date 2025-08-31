@@ -13,7 +13,9 @@ const messageSchema = new mongoose.Schema(
     image: String,
 
     deliveredTo: [{ type: ObjectId, ref: "User" }], // delivery receipts
+    deliveredAt: { type: Date }, // NEW: when delivered
     readBy: [{ type: ObjectId, ref: "User" }], // read receipts
+    readAt: { type: Date }, // NEW: when read
 
     reactions: [
       {

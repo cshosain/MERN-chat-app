@@ -185,10 +185,19 @@ export const markConversationRead = async (req, res) => {
     // Only update readBy and emit if BOTH users allow read receipts
     const canEmit = conv.participants.every((pid) => userSettings[String(pid)]);
     if (canEmit) {
-      await Message.updateMany(
-        { conversationId, readBy: { $ne: userId } },
-        { $addToSet: { readBy: userId } }
-      );
+      // Update readBy and readAt for each unread message
+      const unreadMessages = await Message.find({
+        conversationId,
+        readBy: { $ne: userId },
+      });
+
+      const now = new Date();
+      for (const msg of unreadMessages) {
+        msg.readBy.push(userId);
+        msg.readAt = now;
+        await msg.save();
+      }
+
       const otherParticipants = conv.participants.filter(
         (p) => !p.equals(userId)
       );
@@ -198,6 +207,7 @@ export const markConversationRead = async (req, res) => {
           io.to(sid).emit("message:read", {
             conversationId,
             readerId: userId.toString(),
+            readAt: now, // send timestamp to frontend
           });
         }
       });

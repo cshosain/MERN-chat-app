@@ -4,9 +4,10 @@ import ChatHeader from "./ChatHeader";
 import MessageInput from "./MessageInput";
 import MessageSkeleton from "./skeletons/MessageSkeleton";
 import { useAuthStore } from "../store/useAuthStore";
-import { formatMessageTime } from "../lib/utils";
+import { formatLastSeen, formatMessageTime } from "../lib/utils";
 import { MoreHorizontal } from "lucide-react";
 import { axiosInstance } from "../lib/axios";
+import { BsCheck2All } from "react-icons/bs";
 
 const EMOJI_MAP = {
   "👍": "like",
@@ -36,15 +37,16 @@ const ChatContainer = () => {
 
   // Reaction UI state
   const [reactionTarget, setReactionTarget] = useState(null);
+  const [statusDetailsTarget, setStatusDetailsTarget] = useState(null);
   const reactions = Object.keys(EMOJI_MAP);
 
   // Load messages
-  useEffect(() => {
-    console.log("load msg");
-    if (selectedConversation?._id) {
-      getMessages(selectedConversation._id);
-    }
-  }, [selectedConversation?._id, getMessages]);
+  // useEffect(() => {
+  //   console.log("load msg");
+  //   if (selectedConversation?._id) {
+  //     getMessages(selectedConversation._id);
+  //   }
+  // }, [selectedConversation?._id, getMessages]);
 
   // Scroll bottom
   useEffect(() => {
@@ -170,11 +172,12 @@ const ChatContainer = () => {
           const userReaction = message.reactions?.find(
             (r) => r.userId === authUser._id
           );
+          const isOutgoing = message.senderId === authUser._id;
           return (
             <div
               key={message._id}
               className={`relative chat ${
-                message.senderId === authUser._id ? "chat-end" : "chat-start"
+                isOutgoing ? "chat-end" : "chat-start"
               }`}
               ref={messageEndRef}
             >
@@ -183,7 +186,7 @@ const ChatContainer = () => {
                 <div className="size-10 rounded-full border">
                   <img
                     src={
-                      message.senderId === authUser._id
+                      isOutgoing
                         ? authUser.profilePic || "/avatar.png"
                         : selectedConversation.isGroup
                         ? "/group.png"
@@ -207,9 +210,11 @@ const ChatContainer = () => {
                   e.preventDefault();
                   setReactionTarget(message._id);
                 }}
+                onDoubleClick={() => setStatusDetailsTarget(message._id)}
+                onMouseEnter={() => setStatusDetailsTarget(message._id)}
+                onMouseLeave={() => setStatusDetailsTarget(null)}
               >
                 {message.text && <p>{message.text}</p>}
-                {/* render the message like mssenger style */}
                 {message.image && (
                   <img
                     src={message.image}
@@ -218,11 +223,13 @@ const ChatContainer = () => {
                   />
                 )}
 
-                {/* Time + Read Receipt */}
-                <span className="text-[10px] mt-1 opacity-60 self-end">
-                  {formatMessageTime(message.createdAt)} ·{" "}
-                  {message.senderId === authUser._id
-                    ? (() => {
+                {/* Time + Status (no time for status here) */}
+                <span className="text-[10px] mt-1 opacity-60 self-end flex items-center gap-1">
+                  {formatMessageTime(message.createdAt)}
+                  {isOutgoing && (
+                    <>
+                      {" · "}
+                      {(() => {
                         const otherId = selectedConversation.isGroup
                           ? null
                           : selectedConversation.participants.find(
@@ -237,25 +244,46 @@ const ChatContainer = () => {
                         const otherSettings =
                           otherUser?.settings?.readReceipts !== false;
 
+                        // Show "Seen" only if both allow and readBy includes otherId and readAt exists
                         if (
                           otherId &&
                           senderSettings &&
                           otherSettings &&
-                          message.readBy?.map(String).includes(String(otherId))
+                          message.readBy
+                            ?.map(String)
+                            .includes(String(otherId)) &&
+                          message.readAt
                         ) {
-                          return "✓✓ Seen";
+                          return (
+                            <>
+                              <span className="text-blue-500">✓✓</span> Seen
+                            </>
+                          );
                         }
+                        // Show "Delivered" only if deliveredTo includes otherId and deliveredAt exists
                         if (
                           otherId &&
                           message.deliveredTo
                             ?.map(String)
-                            .includes(String(otherId))
+                            .includes(String(otherId)) &&
+                          message.deliveredAt
                         ) {
-                          return "✓✓ Delivered";
+                          return (
+                            <>
+                              <span className="text-green-500">✓✓</span>{" "}
+                              Delivered
+                            </>
+                          );
                         }
-                        return "✓ Sent";
-                      })()
-                    : ""}
+                        // Otherwise show "Sent"
+                        return (
+                          <>
+                            <span className="text-gray-400">✓</span> Sent
+                          </>
+                        );
+                      })()}
+                    </>
+                  )}
                 </span>
 
                 {/* Show reactions below bubble */}
@@ -288,6 +316,41 @@ const ChatContainer = () => {
                         {emoji}
                       </button>
                     ))}
+                  </div>
+                )}
+
+                {/* Status Details Popup (only on hover/double-click) */}
+                {statusDetailsTarget === message._id && isOutgoing && (
+                  <div className="absolute -bottom-8 right-0 bg-[#202c33] text-[#e9edef] shadow-2xl rounded-lg p-3 text-sm z-50 w-52">
+                    <div className="flex flex-col gap-2">
+                      {/* Read Status Row */}
+                      {message.readAt && (
+                        <div className="flex justify-between items-center w-full">
+                          <div className="flex items-center gap-2.5">
+                            {/* Blue checkmark for 'Read' */}
+                            <BsCheck2All className="text-[#53bdeb]" size={20} />
+                            <span>Read</span>
+                          </div>
+                          <span className="text-[#8696a0] text-xs">
+                            {formatLastSeen(message.readAt)}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Delivered Status Row */}
+                      {message.deliveredAt && (
+                        <div className="flex justify-between items-center w-full">
+                          <div className="flex items-center gap-2.5">
+                            {/* Grey checkmark for 'Delivered' */}
+                            <BsCheck2All className="text-[#8696a0]" size={20} />
+                            <span>Delivered</span>
+                          </div>
+                          <span className="text-[#8696a0] text-xs">
+                            {formatLastSeen(message.deliveredAt)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

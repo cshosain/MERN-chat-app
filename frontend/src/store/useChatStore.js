@@ -70,6 +70,7 @@ export const useChatStore = create((set, get) => ({
     socket.on("message:new", ({ conversationId, message }) => {
       if (get().selectedConversation?._id === conversationId) {
         set((s) => ({ messages: [...s.messages, message] }));
+        // Remove this line:
         axiosInstance.post(`/conversations/read/${conversationId}`);
       } else {
         set((s) => ({
@@ -90,7 +91,7 @@ export const useChatStore = create((set, get) => ({
       }
     });
 
-    socket.on("message:delivered", ({ messageId, userId, at }) => {
+    socket.on("message:delivered", ({ messageId, userId, deliveredAt }) => {
       set((s) => ({
         messages: s.messages.map((msg) =>
           msg._id === messageId
@@ -99,7 +100,27 @@ export const useChatStore = create((set, get) => ({
                 deliveredTo: Array.from(
                   new Set([...(msg.deliveredTo || []), userId])
                 ),
-                deliveredAt: at,
+                deliveredAt,
+              }
+            : msg
+        ),
+      }));
+      // //working here. 3 pm 31/8/25
+      // if (message.readBy.includes(message.receiverId)) {
+      //   console.log("done");
+      //   socket.emit("message:read", {messageId: message._id, userId: message.receiverId, readAt: message.readAt })
+      // }
+    });
+
+    socket.on("message:read", ({ conversationId, readerId, readAt }) => {
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          String(msg.conversationId) === String(conversationId) &&
+          !msg.readBy?.map(String).includes(String(readerId))
+            ? {
+                ...msg,
+                readBy: [...(msg.readBy || []), readerId],
+                readAt, // update timestamp
               }
             : msg
         ),

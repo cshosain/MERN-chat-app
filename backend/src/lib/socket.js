@@ -135,12 +135,14 @@ io.on("connection", async (socket) => {
     }
   });
 
+  // Delivery receipt
   socket.on("message:delivered", async ({ messageId }) => {
-    const userId = socket.handshake.query.userId;
+    const userId = socket.userId || socket.handshake?.query?.userId;
     const msg = await Message.findById(messageId);
     if (!msg) return;
     if (!msg.deliveredTo.map(String).includes(String(userId))) {
       msg.deliveredTo.push(userId);
+      msg.deliveredAt = new Date(); // Set deliveredAt
       await msg.save();
     }
     // Notify sender
@@ -149,7 +151,29 @@ io.on("connection", async (socket) => {
       io.to(senderSid).emit("message:delivered", {
         messageId,
         userId,
-        at: new Date().toISOString(),
+        deliveredAt: msg.deliveredAt,
+      });
+    }
+  });
+
+  // Read receipt
+  socket.on("message:read", async ({ messageId }) => {
+    const userId = socket.userId || socket.handshake?.query?.userId;
+    const msg = await Message.findById(messageId);
+    if (!msg) return;
+    if (!msg.readBy.map(String).includes(String(userId))) {
+      msg.readBy.push(userId);
+      msg.readAt = new Date(); // Set readAt
+      await msg.save();
+    }
+    // Notify sender if privacy allows
+    // ...privacy check...
+    const senderSid = onlineUsers[String(msg.senderId)];
+    if (senderSid) {
+      io.to(senderSid).emit("message:read", {
+        messageId,
+        userId,
+        readAt: msg.readAt,
       });
     }
   });
