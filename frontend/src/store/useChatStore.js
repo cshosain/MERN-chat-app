@@ -67,8 +67,6 @@ export const useChatStore = create((set, get) => ({
     const socket = useAuthStore.getState().socket;
     if (!socket) return;
 
-    // new message
-    socket.off("message:new");
     socket.on("message:new", ({ conversationId, message }) => {
       if (get().selectedConversation?._id === conversationId) {
         set((s) => ({ messages: [...s.messages, message] }));
@@ -86,6 +84,26 @@ export const useChatStore = create((set, get) => ({
           ),
         }));
       }
+      // If recipient, emit delivered
+      if (message.receiverId === useAuthStore.getState().authUser._id) {
+        socket.emit("message:delivered", { messageId: message._id });
+      }
+    });
+
+    socket.on("message:delivered", ({ messageId, userId, at }) => {
+      set((s) => ({
+        messages: s.messages.map((msg) =>
+          msg._id === messageId
+            ? {
+                ...msg,
+                deliveredTo: Array.from(
+                  new Set([...(msg.deliveredTo || []), userId])
+                ),
+                deliveredAt: at,
+              }
+            : msg
+        ),
+      }));
     });
 
     // update conversation

@@ -176,13 +176,19 @@ export const markConversationRead = async (req, res) => {
     conv.unreadCounts.set(String(userId), 0);
     await conv.save();
 
-    await Message.updateMany(
-      { conversationId, readBy: { $ne: userId } },
-      { $addToSet: { readBy: userId } }
+    // Check read receipt privacy for all participants
+    const users = await User.find({ _id: { $in: conv.participants } });
+    const userSettings = Object.fromEntries(
+      users.map((u) => [String(u._id), u.settings?.readReceipts !== false])
     );
 
-    const canEmit = await shouldEmitReadReceipt(userId);
+    // Only update readBy and emit if BOTH users allow read receipts
+    const canEmit = conv.participants.every((pid) => userSettings[String(pid)]);
     if (canEmit) {
+      await Message.updateMany(
+        { conversationId, readBy: { $ne: userId } },
+        { $addToSet: { readBy: userId } }
+      );
       const otherParticipants = conv.participants.filter(
         (p) => !p.equals(userId)
       );

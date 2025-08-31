@@ -209,21 +209,38 @@ const ChatContainer = () => {
                 }}
               >
                 {message.text && <p>{message.text}</p>}
+                {/* render the message like mssenger style */}
+                {message.image && (
+                  <img
+                    src={message.image}
+                    alt="message attachment"
+                    className="max-w-md md:max-w-sm rounded-lg mt-2"
+                  />
+                )}
 
                 {/* Time + Read Receipt */}
                 <span className="text-[10px] mt-1 opacity-60 self-end">
                   {formatMessageTime(message.createdAt)} ·{" "}
                   {message.senderId === authUser._id
                     ? (() => {
-                        // determine other user id for 1-1
                         const otherId = selectedConversation.isGroup
                           ? null
                           : selectedConversation.participants.find(
                               (p) => p._id !== authUser._id
                             )?._id;
+                        const senderSettings =
+                          authUser.settings?.readReceipts !== false;
+                        const otherUser =
+                          selectedConversation.participants.find(
+                            (p) => p._id === otherId
+                          );
+                        const otherSettings =
+                          otherUser?.settings?.readReceipts !== false;
 
                         if (
                           otherId &&
+                          senderSettings &&
+                          otherSettings &&
                           message.readBy?.map(String).includes(String(otherId))
                         ) {
                           return "✓✓ Seen";

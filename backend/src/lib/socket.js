@@ -2,6 +2,7 @@ import { Server } from "socket.io";
 import { createServer } from "http";
 import express from "express";
 import User from "../models/user.model.js";
+import Message from "../models/message.model.js";
 
 const app = express();
 const httpServer = createServer(app);
@@ -131,6 +132,25 @@ io.on("connection", async (socket) => {
       }
     } catch (err) {
       console.error("Reaction error:", err.message);
+    }
+  });
+
+  socket.on("message:delivered", async ({ messageId }) => {
+    const userId = socket.handshake.query.userId;
+    const msg = await Message.findById(messageId);
+    if (!msg) return;
+    if (!msg.deliveredTo.map(String).includes(String(userId))) {
+      msg.deliveredTo.push(userId);
+      await msg.save();
+    }
+    // Notify sender
+    const senderSid = onlineUsers[String(msg.senderId)];
+    if (senderSid) {
+      io.to(senderSid).emit("message:delivered", {
+        messageId,
+        userId,
+        at: new Date().toISOString(),
+      });
     }
   });
 
