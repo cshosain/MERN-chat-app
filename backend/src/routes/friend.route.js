@@ -6,6 +6,7 @@ import {
   listFriends,
   listFriendRequests,
   friendSuggestions,
+  cancelFirendRequest,
 } from "../controllers/friend.controller.js";
 
 const router = express.Router();
@@ -15,5 +16,6 @@ router.post("/respond/:requestId", protectRoute, respondFriendRequest);
 router.get("/list", protectRoute, listFriends);
 router.get("/requests", protectRoute, listFriendRequests);
 router.get("/suggestions", protectRoute, friendSuggestions);
+router.delete("/cancel/:requestId", protectRoute, cancelFirendRequest);
 
 export default router;

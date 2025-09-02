@@ -5,7 +5,7 @@ import toast from "react-hot-toast";
 import { useChatStore } from "../store/useChatStore";
 import { useNavigate } from "react-router-dom";
 
-const PeopleYouMayKnow = () => {
+const PeopleYouMayKnow = ({ excludeIds }) => {
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const { setSelectedConversation } = useChatStore();
@@ -29,6 +29,10 @@ const PeopleYouMayKnow = () => {
     };
     fetchSuggestions();
   }, []);
+
+  const filteredSuggestions = suggestions.filter(
+    (person) => !excludeIds.includes(person._id)
+  );
 
   const handleAddFriend = async (userId) => {
     try {
@@ -66,7 +70,7 @@ const PeopleYouMayKnow = () => {
     <div className="mt-6">
       <h2 className="text-lg font-semibold mb-3">People you may know</h2>
       <div className="grid sm:grid-cols-2 gap-4">
-        {suggestions.map((u) => (
+        {filteredSuggestions.map((u) => (
           <div
             key={u._id}
             className="border border-base-300 rounded-xl p-4 flex items-center justify-between"
@@ -121,7 +125,7 @@ const PeopleYouMayKnow = () => {
           </div>
         ))}
 
-        {suggestions.length === 0 && (
+        {filteredSuggestions.length === 0 && (
           <p className="text-zinc-500 text-sm">No suggestions available</p>
         )}
       </div>

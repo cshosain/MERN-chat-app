@@ -1,7 +1,4 @@
-import { useEffect } from "react";
-import { useFriendStore } from "../store/useFriendStore";
-import { useChatStore } from "../store/useChatStore";
-import { useAuthStore } from "../store/useAuthStore";
+import { useEffect, useState } from "react";
 import {
   LogOut,
   MessageSquare,
@@ -9,13 +6,45 @@ import {
   User,
   Users,
   Inbox,
+  Menu,
+  X,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
+
+// --- MOCK STORES to make the component runnable ---
+const useMockAuthStore = () => {
+  const [authUser, setAuthUser] = useState({ name: "Demo User", id: "123" });
+  const logout = () => {
+    setAuthUser(null);
+    console.log("Logged out");
+  };
+  return { authUser, logout };
+};
+
+const useMockChatStore = () => ({
+  conversations: [
+    { isRequest: true, accepted: false },
+    { isRequest: true, accepted: true },
+  ],
+});
+
+const useMockFriendStore = () => ({
+  incoming: [{ id: "user1" }, { id: "user2" }, { id: "user3" }],
+  getFriendRequests: () => console.log("Fetching friend requests..."),
+});
+// --- END MOCK STORES ---
 
 const Navbar = () => {
-  const { logout, authUser } = useAuthStore();
-  const { conversations } = useChatStore();
-  const { incoming, getFriendRequests } = useFriendStore();
+  const { logout, authUser } = useMockAuthStore();
+  const { conversations } = useMockChatStore();
+  const { incoming, getFriendRequests } = useMockFriendStore();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const location = useLocation();
+
+  // Close mobile menu automatically on route change
+  useEffect(() => {
+    setIsMenuOpen(false);
+  }, [location]);
 
   useEffect(() => {
     if (authUser) getFriendRequests();
@@ -26,73 +55,117 @@ const Navbar = () => {
     (c) => c.isRequest && !c.accepted
   ).length;
 
+  const navLinks = [
+    { to: "/friends", icon: Users, text: "Friends" },
+    {
+      to: "/friend-requests",
+      icon: Inbox,
+      text: "Requests",
+      count: friendRequestCount,
+    },
+    {
+      to: "/message-requests",
+      icon: MessageSquare,
+      text: "Messages",
+      count: messageRequestCount,
+    },
+    { to: "/profile", icon: User, text: "Profile" },
+    { to: "/settings", icon: Settings, text: "Settings" },
+  ];
+
   return (
-    <header className="bg-base-100 border-b border-base-300 fixed w-full top-0 z-40 backdrop-blur-lg">
+    <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 fixed w-full top-0 z-50 shadow-sm">
       <div className="container mx-auto px-4 h-16">
         <div className="flex items-center justify-between h-full">
           {/* Logo */}
-          <Link
-            to="/"
-            className="flex items-center gap-2.5 hover:opacity-80 transition-all"
-          >
-            <div className="size-9 rounded-lg bg-primary/10 flex items-center justify-center">
-              <MessageSquare className="w-5 h-5 text-primary" />
+          <Link to="/" className="flex items-center gap-2.5 flex-shrink-0">
+            <div className="size-9 rounded-lg bg-blue-600 flex items-center justify-center">
+              <MessageSquare className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-lg font-bold">Chatty</h1>
+            <h1 className="text-xl font-bold text-gray-800 dark:text-white">
+              Chatty
+            </h1>
           </Link>
 
-          <div className="flex items-center gap-3">
-            <Link to={"/friends"} className="btn btn-sm gap-2">
-              <Users className="w-4 h-4" />
-              <span className="hidden sm:inline">Friends</span>
-            </Link>
-
-            <Link to={"/friend-requests"} className="relative btn btn-sm gap-2">
-              <Inbox className="w-4 h-4" />
-              <span className="hidden sm:inline">Requests</span>
-              {friendRequestCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full">
-                  {friendRequestCount}
-                </span>
-              )}
-            </Link>
-
-            <Link
-              to={"/message-requests"}
-              className="relative btn btn-sm gap-2"
+          {/* Desktop Navigation */}
+          <nav className="hidden md:flex items-center gap-2">
+            {navLinks.map((link) => (
+              <Link
+                key={link.to}
+                to={link.to}
+                className="relative px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors"
+              >
+                {link.text}
+                {link.count > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full">
+                    {link.count}
+                  </span>
+                )}
+              </Link>
+            ))}
+            <button
+              onClick={logout}
+              className="ml-2 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors flex items-center gap-2"
             >
-              <MessageSquare className="w-4 h-4" />
-              <span className="hidden sm:inline">Messages</span>
-              {messageRequestCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-primary text-white text-xs w-5 h-5 flex items-center justify-center rounded-full">
-                  {messageRequestCount}
-                </span>
+              <LogOut className="w-4 h-4" />
+              <span>Logout</span>
+            </button>
+          </nav>
+
+          {/* Mobile Menu Button */}
+          <div className="md:hidden">
+            <button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="p-2 rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+              aria-expanded={isMenuOpen}
+              aria-controls="mobile-menu"
+            >
+              <span className="sr-only">Open main menu</span>
+              {isMenuOpen ? (
+                <X className="block h-6 w-6" />
+              ) : (
+                <Menu className="block h-6 w-6" />
               )}
-            </Link>
-
-            <Link to={"/settings"} className="btn btn-sm gap-2">
-              <Settings className="w-4 h-4" />
-              <span className="hidden sm:inline">Settings</span>
-            </Link>
-
-            {authUser && (
-              <>
-                <Link to={"/profile"} className="btn btn-sm gap-2">
-                  <User className="size-5" />
-                  <span className="hidden sm:inline">Profile</span>
-                </Link>
-                <button
-                  className="btn btn-sm flex gap-2 items-center"
-                  onClick={logout}
-                >
-                  <LogOut className="size-5" />
-                  <span className="hidden sm:inline">Logout</span>
-                </button>
-              </>
-            )}
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Mobile Menu Panel */}
+      {isMenuOpen && (
+        <nav
+          className="md:hidden bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700"
+          id="mobile-menu"
+        >
+          <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+            {navLinks.map((link) => (
+              <Link
+                key={link.to}
+                to={link.to}
+                className="flex items-center justify-between px-3 py-3 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md"
+              >
+                <div className="flex items-center gap-3">
+                  <link.icon className="w-5 h-5" />
+                  <span>{link.text}</span>
+                </div>
+                {link.count > 0 && (
+                  <span className="bg-red-500 text-white text-xs w-6 h-6 flex items-center justify-center rounded-full">
+                    {link.count}
+                  </span>
+                )}
+              </Link>
+            ))}
+            <hr className="border-gray-200 dark:border-gray-700 my-2" />
+            <button
+              onClick={logout}
+              className="w-full flex items-center gap-3 px-3 py-3 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md"
+            >
+              <LogOut className="w-5 h-5" />
+              <span>Logout</span>
+            </button>
+          </div>
+        </nav>
+      )}
     </header>
   );
 };

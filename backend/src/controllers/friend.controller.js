@@ -134,6 +134,25 @@ export const sendFriendRequest = async (req, res) => {
   }
 };
 
+export const cancelFirendRequest = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { requestId } = req.params;
+    const fr = await FriendRequest.findById(requestId);
+    if (
+      !fr ||
+      String(fr.requester) !== String(userId) ||
+      fr.status !== "pending"
+    ) {
+      return res.status(404).json({ message: "Request not found" });
+    }
+    await fr.deleteOne();
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 export const respondFriendRequest = async (req, res) => {
   try {
     const userId = req.user._id;

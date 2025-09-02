@@ -24,21 +24,21 @@ const ChatHeader = () => {
   useEffect(() => {
     if (
       authUser &&
-      authUser.settings.lastSeenVisible &&
+      authUser?.settings?.lastSeenVisible &&
       otherUser &&
-      otherUser.settings.lastSeenVisible
+      otherUser?.settings?.lastSeenVisible
     ) {
-      console.log("Fetching last seen for user:", otherUser._id);
-      getLastSeenByUserId(otherUser._id);
+      console.log("Fetching last seen for user:", otherUser?._id);
+      getLastSeenByUserId(otherUser?._id);
     }
-  }, [otherUser._id, getLastSeenByUserId, authUser, otherUser]);
+  }, [otherUser?._id, getLastSeenByUserId, authUser, otherUser]);
 
   if (!selectedConversation) return null;
   const formattedLastSeen =
     authUser &&
-    authUser.settings.lastSeenVisible &&
+    authUser?.settings?.lastSeenVisible &&
     otherUser &&
-    otherUser.settings.lastSeenVisible
+    otherUser?.settings?.lastSeenVisible
       ? formatLastSeen(lastSeen)
       : "Last seen is hidden";
 
