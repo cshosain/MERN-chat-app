@@ -10,34 +10,14 @@ import {
   X,
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
-
-// --- MOCK STORES to make the component runnable ---
-const useMockAuthStore = () => {
-  const [authUser, setAuthUser] = useState({ name: "Demo User", id: "123" });
-  const logout = () => {
-    setAuthUser(null);
-    console.log("Logged out");
-  };
-  return { authUser, logout };
-};
-
-const useMockChatStore = () => ({
-  conversations: [
-    { isRequest: true, accepted: false },
-    { isRequest: true, accepted: true },
-  ],
-});
-
-const useMockFriendStore = () => ({
-  incoming: [{ id: "user1" }, { id: "user2" }, { id: "user3" }],
-  getFriendRequests: () => console.log("Fetching friend requests..."),
-});
-// --- END MOCK STORES ---
+import { useAuthStore } from "../store/useAuthStore";
+import { useChatStore } from "../store/useChatStore";
+import { useFriendStore } from "../store/useFriendStore";
 
 const Navbar = () => {
-  const { logout, authUser } = useMockAuthStore();
-  const { conversations } = useMockChatStore();
-  const { incoming, getFriendRequests } = useMockFriendStore();
+  const { logout, authUser } = useAuthStore();
+  const { conversations } = useChatStore();
+  const { incoming, getFriendRequests } = useFriendStore();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const location = useLocation();
 
@@ -95,6 +75,7 @@ const Navbar = () => {
                 to={link.to}
                 className="relative px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors"
               >
+                {<link.icon className="w-4 h-4 inline-block mr-1" />}
                 {link.text}
                 {link.count > 0 && (
                   <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full">

@@ -215,6 +215,9 @@ const SettingsPage = () => {
               }
             />
           </div>
+          <p className="text-xs text-gray-500 mt-1 border-b border-base-300 pb-4 mb-4">
+            You can chat with anyone without showing yourself online.
+          </p>
 
           {/* Last seen */}
           <div className="flex items-center justify-between mb-3">
@@ -228,6 +231,10 @@ const SettingsPage = () => {
               }
             />
           </div>
+          <p className="text-xs text-gray-500 mt-1 border-b border-base-300 pb-4 mb-4">
+            When you hide your last seen, you can not see last seen of other
+            person.
+          </p>
 
           {/* Read receipts */}
           <div className="flex items-center justify-between mb-3">
@@ -241,6 +248,10 @@ const SettingsPage = () => {
               }
             />
           </div>
+          <p className="text-xs text-gray-500 mt-1 border-b border-base-300 pb-4 mb-4">
+            When you hide your read receipts, you can not get the read receipts
+            from other person.
+          </p>
 
           {/* Typing indicators */}
           <div className="flex items-center justify-between">
@@ -254,6 +265,10 @@ const SettingsPage = () => {
               }
             />
           </div>
+          <p className="text-xs text-gray-500 mt-1 border-b border-base-300 pb-4 mb-4">
+            When you hide typing indicators, you can not see typing indicators
+            while other typing.
+          </p>
         </div>
       </div>
     </div>
