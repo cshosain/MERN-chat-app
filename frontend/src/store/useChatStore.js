@@ -8,6 +8,8 @@ export const useChatStore = create((set, get) => ({
   conversations: [],
   selectedConversation: null,
   messages: [],
+  hasMoreMessages: true,
+  isMessagesLoading: false,
   lastSeen: new Date(),
 
   getConversations: async () => {
@@ -15,19 +17,26 @@ export const useChatStore = create((set, get) => ({
     set({ conversations: res.data });
   },
 
-  getMessages: async (conversationId) => {
-    const res = await axiosInstance.get(
-      `/conversations/by-conversation/${conversationId}`
-    );
-    console.log(conversationId);
-    set({ messages: res.data });
-    // reset unread count when opening chat
-    set((s) => ({
-      conversations: s.conversations.map((c) =>
-        c._id === conversationId ? { ...c, unreadCount: 0 } : c
-      ),
-    }));
-    await axiosInstance.post(`/conversations/read/${conversationId}`);
+  fetchMessages: async (conversationId, { limit = 20, before } = {}) => {
+    set({ isMessagesLoading: true });
+    try {
+      const params = new URLSearchParams();
+      params.append("limit", limit);
+      if (before) params.append("before", before);
+
+      const res = await axiosInstance.get(
+        `/conversations/by-conversation/${conversationId}?${params.toString()}`
+      );
+      const newMessages = res.data;
+      set((s) => ({
+        messages: before ? [...newMessages, ...s.messages] : newMessages,
+        hasMoreMessages: newMessages.length === limit,
+      }));
+    } catch (error) {
+      toast.error("Failed to load messages");
+    } finally {
+      set({ isMessagesLoading: false });
+    }
   },
 
   getLastSeenByUserId: async (otherUserId) => {

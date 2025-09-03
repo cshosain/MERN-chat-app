@@ -144,16 +144,28 @@ export const getMessagesByConversation = async (req, res) => {
   try {
     const { id: conversationId } = req.params;
     const userId = req.user._id;
+    const limit = parseInt(req.query.limit) || 20;
+    const before = req.query.before; // messageId or timestamp
 
     const conv = await Conversation.findById(conversationId);
     if (!conv || !conv.participants.some((p) => String(p) === String(userId))) {
       return res.status(403).json({ message: "Not a participant" });
     }
 
-    const messages = await Message.find({ conversationId }).sort({
-      createdAt: 1,
-    });
-    res.json(messages);
+    let query = { conversationId };
+    if (before) {
+      // Find the message and use its createdAt for pagination
+      const beforeMsg = await Message.findById(before);
+      if (beforeMsg) {
+        query.createdAt = { $lt: beforeMsg.createdAt };
+      }
+    }
+
+    const messages = await Message.find(query)
+      .sort({ createdAt: -1 })
+      .limit(limit);
+
+    res.json(messages.reverse()); // reverse to oldest-first
   } catch (e) {
     res.status(500).json({ message: "Server error" });
   }

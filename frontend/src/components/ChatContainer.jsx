@@ -24,7 +24,8 @@ const TYPE_TO_EMOJI = Object.fromEntries(
 const ChatContainer = () => {
   const {
     messages,
-    getMessages,
+    fetchMessages,
+    hasMoreMessages,
     isMessagesLoading,
     selectedConversation,
     addReaderToMessages,
@@ -33,6 +34,8 @@ const ChatContainer = () => {
   const messageEndRef = useRef(null);
   const typingRef = useRef(null);
   const pickerRef = useRef(null);
+  const scrollRef = useRef(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
   const [isTyping, setIsTyping] = useState(false);
 
   // Reaction UI state
@@ -40,13 +43,41 @@ const ChatContainer = () => {
   const [statusDetailsTarget, setStatusDetailsTarget] = useState(null);
   const reactions = Object.keys(EMOJI_MAP);
 
-  // Load messages
-  // useEffect(() => {
-  //   console.log("load msg");
-  //   if (selectedConversation?._id) {
-  //     getMessages(selectedConversation._id);
-  //   }
-  // }, [selectedConversation?._id, getMessages]);
+  // Initial load: scroll to bottom after messages load
+  useEffect(() => {
+    if (scrollRef.current && messages.length > 0) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages.length, selectedConversation._id]);
+
+  // Initial load
+  useEffect(() => {
+    if (selectedConversation?._id) {
+      fetchMessages(selectedConversation._id);
+    }
+  }, [selectedConversation?._id, fetchMessages]);
+
+  // Infinite scroll: fetch more when scrolled to top
+  const handleScroll = () => {
+    if (!scrollRef.current || isMessagesLoading || !hasMoreMessages) return;
+    // If scrolled to top, fetch older messages
+    if (scrollRef.current.scrollTop < 50 && messages.length > 0) {
+      const oldestMsgId = messages[0]?._id;
+      fetchMessages(selectedConversation._id, { before: oldestMsgId });
+    }
+    // Track if user is at bottom
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    setIsAtBottom(scrollHeight - scrollTop - clientHeight < 50);
+  };
+
+  // When new message arrives, scroll to bottom only if user is at bottom
+  useEffect(() => {
+    if (!scrollRef.current || messages.length === 0) return;
+    if (isAtBottom) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+    // else: optionally show a "new message" indicator
+  }, [messages, isAtBottom]);
 
   // Scroll bottom
   useEffect(() => {
@@ -92,10 +123,10 @@ const ChatContainer = () => {
   // Mark messages as read
   useEffect(() => {
     if (selectedConversation?._id) {
-      getMessages(selectedConversation._id);
+      fetchMessages(selectedConversation._id);
       axiosInstance.post(`/conversations/read/${selectedConversation._id}`);
     }
-  }, [getMessages, selectedConversation?._id]);
+  }, [fetchMessages, selectedConversation?._id]);
 
   // Read receipts
   useEffect(() => {
@@ -167,7 +198,17 @@ const ChatContainer = () => {
   return (
     <div className="flex-1 flex flex-col overflow-auto">
       <ChatHeader />
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div
+        className="flex-1 overflow-y-auto p-4 space-y-4"
+        ref={scrollRef}
+        onScroll={handleScroll}
+        style={{ position: "relative" }}
+      >
+        {isMessagesLoading && (
+          <div className="absolute top-0 left-0 w-full flex justify-center">
+            <MessageSkeleton />
+          </div>
+        )}
         {messages.map((message) => {
           const userReaction = message.reactions?.find(
             (r) => r.userId === authUser._id
