@@ -7,7 +7,7 @@ import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import { connectDB } from "./lib/db.js";
 import cors from "cors";
-import { io, httpServer, app } from "./lib/socket.js";
+import { httpServer, app } from "./lib/socket.js";
 
 dotenv.config();
 const PORT = process.env.PORT || 3001;
@@ -27,7 +27,7 @@ app.use("/api/conversations", conversationRoutes);
 app.use("/api/friends", friendRoutes);
 
 // Global error handler for payload too large
-app.use((err, req, res, next) => {
+app.use((err, _req, res) => {
   if (err.type === "entity.too.large") {
     return res
       .status(413)

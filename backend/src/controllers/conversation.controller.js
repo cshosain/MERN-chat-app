@@ -1,4 +1,4 @@
-import { canMessage, shouldEmitReadReceipt } from "../lib/utils.js";
+import { canMessage } from "../lib/utils.js";
 import Conversation from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
 import User from "../models/user.model.js";

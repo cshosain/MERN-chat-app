@@ -77,7 +77,7 @@ export const login = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
-export const logout = (req, res) => {
+export const logout = (_req, res) => {
   // Handle logout logic here
   try {
     res.clearCookie("chatAppUserToken", {

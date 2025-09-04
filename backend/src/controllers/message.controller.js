@@ -1,9 +1,8 @@
 import Message from "../models/message.model.js";
 import Conversation from "../models/conversation.model.js";
-import User from "../models/user.model.js";
 import cloudinary from "../lib/cloudinary.js";
 import { getReceiverSocketId, io } from "../lib/socket.js";
-import { canMessage, shouldEmitReadReceipt } from "../lib/utils.js";
+import { canMessage } from "../lib/utils.js";
 
 /**
  * Send a message into a conversation.
