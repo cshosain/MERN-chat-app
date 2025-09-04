@@ -79,7 +79,6 @@ export const useChatStore = create((set, get) => ({
     socket.on("message:new", ({ conversationId, message }) => {
       if (get().selectedConversation?._id === conversationId) {
         set((s) => ({ messages: [...s.messages, message] }));
-        // Remove this line:
         axiosInstance.post(`/conversations/read/${conversationId}`);
       } else {
         set((s) => ({
@@ -114,11 +113,6 @@ export const useChatStore = create((set, get) => ({
             : msg
         ),
       }));
-      // //working here. 3 pm 31/8/25
-      // if (message.readBy.includes(message.receiverId)) {
-      //   console.log("done");
-      //   socket.emit("message:read", {messageId: message._id, userId: message.receiverId, readAt: message.readAt })
-      // }
     });
 
     socket.on("message:read", ({ conversationId, readerId, readAt }) => {
@@ -185,7 +179,6 @@ export const useChatStore = create((set, get) => ({
       }));
     });
   },
-  // Add this function inside your create((set) => ({ ... })) block
 
   addReaderToMessages: (conversationId, readerId) => {
     set((state) => ({

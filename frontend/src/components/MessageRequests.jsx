@@ -95,7 +95,6 @@ const MessageRequests = () => {
         )}
         <div className="space-y-3">
           {outgoing.map((r) => {
-            console.log("r", r);
             const other = r.participants.find((p) => p._id !== r.requestedBy);
             return (
               <div

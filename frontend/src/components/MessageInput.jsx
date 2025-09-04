@@ -41,16 +41,12 @@ const MessageInput = () => {
       setText("");
       removeImage();
     } catch (err) {
-      console.error("Failed to send message:", err);
+      toast.error("Failed to send message");
     }
   };
 
   const handleTyping = () => {
     //when authUser.settings.showTypingIndicator is true, then only emit typing event
-    console.log(
-      "Typing indicator setting:",
-      useAuthStore.getState().authUser.settings.typingIndicators
-    );
     if (
       socket &&
       selectedConversation &&

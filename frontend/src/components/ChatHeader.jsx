@@ -13,13 +13,11 @@ const ChatHeader = () => {
     getLastSeenByUserId,
   } = useChatStore();
   // For 1-1 chats, find the other participant
-  console.log("authUser:", authUser);
   const otherUser = !selectedConversation.isGroup
     ? selectedConversation.participants.find((p) => p._id !== authUser._id)
     : null;
 
   const isOnline = otherUser ? onlineUsers.includes(otherUser._id) : false;
-  console.log("otherUser:", otherUser);
 
   useEffect(() => {
     if (
@@ -28,7 +26,6 @@ const ChatHeader = () => {
       otherUser &&
       otherUser?.settings?.lastSeenVisible
     ) {
-      console.log("Fetching last seen for user:", otherUser?._id);
       getLastSeenByUserId(otherUser?._id);
     }
   }, [otherUser?._id, getLastSeenByUserId, authUser, otherUser]);
