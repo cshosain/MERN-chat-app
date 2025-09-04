@@ -27,7 +27,7 @@ app.use("/api/conversations", conversationRoutes);
 app.use("/api/friends", friendRoutes);
 
 // Global error handler for payload too large
-app.use((err, _req, res) => {
+app.use((err, _req, res, _next) => {
   if (err.type === "entity.too.large") {
     return res
       .status(413)
