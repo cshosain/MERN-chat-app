@@ -140,7 +140,7 @@ const FriendRequestsPage = () => {
         {outgoing.length === 0 ? (
           <p className="text-zinc-500 text-sm">No outgoing requests</p>
         ) : (
-          <div className="space-y-3">
+          <div className="grid sm:grid-cols-2 gap-4 space-y-3">
             {outgoing.map((req) => (
               <div
                 key={req._id}

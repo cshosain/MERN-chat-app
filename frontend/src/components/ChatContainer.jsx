@@ -5,7 +5,7 @@ import MessageInput from "./MessageInput";
 import MessageSkeleton from "./skeletons/MessageSkeleton";
 import { useAuthStore } from "../store/useAuthStore";
 import { formatLastSeen, formatMessageTime } from "../lib/utils";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, ArrowDownToLine } from "lucide-react";
 import { axiosInstance } from "../lib/axios";
 import { BsCheck2All } from "react-icons/bs";
 
@@ -43,13 +43,6 @@ const ChatContainer = () => {
   const [statusDetailsTarget, setStatusDetailsTarget] = useState(null);
   const reactions = Object.keys(EMOJI_MAP);
 
-  // Initial load: scroll to bottom after messages load
-  useEffect(() => {
-    if (scrollRef.current && messages.length > 0) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages.length, selectedConversation._id]);
-
   // Initial load
   useEffect(() => {
     if (selectedConversation?._id) {
@@ -58,40 +51,48 @@ const ChatContainer = () => {
   }, [selectedConversation?._id, fetchMessages]);
 
   // Infinite scroll: fetch more when scrolled to top
-  const handleScroll = () => {
+  const handleScroll = async () => {
     if (!scrollRef.current || isMessagesLoading || !hasMoreMessages) return;
-    // If scrolled to top, fetch older messages
-    if (scrollRef.current.scrollTop < 50 && messages.length > 0) {
-      const oldestMsgId = messages[0]?._id;
-      fetchMessages(selectedConversation._id, { before: oldestMsgId });
-    }
-    // Track if user is at bottom
+
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+
+    // If scrolled to top → fetch older messages
+    if (scrollTop < 50 && messages.length > 0) {
+      const oldestMsgId = messages[0]?._id;
+
+      // Save current scrollHeight before fetching
+      const prevHeight = scrollRef.current.scrollHeight;
+
+      await fetchMessages(selectedConversation._id, { before: oldestMsgId });
+
+      // After new messages prepend, restore position
+      requestAnimationFrame(() => {
+        if (scrollRef.current) {
+          const newHeight = scrollRef.current.scrollHeight;
+          scrollRef.current.scrollTop = newHeight - prevHeight + scrollTop;
+        }
+      });
+    }
+
+    // Track if user is at bottom
     setIsAtBottom(scrollHeight - scrollTop - clientHeight < 50);
   };
 
-  // When new message arrives, scroll to bottom only if user is at bottom
+  // Auto-scroll when new messages arrive ONLY if user is at bottom
   useEffect(() => {
     if (!scrollRef.current || messages.length === 0) return;
+
     if (isAtBottom) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-    // else: optionally show a "new message" indicator
   }, [messages, isAtBottom]);
-
-  // Scroll bottom
-  useEffect(() => {
-    if (messageEndRef.current) {
-      messageEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages]);
 
   // Scroll to typing indicator
   useEffect(() => {
-    if (typingRef.current) {
+    if (typingRef.current && isAtBottom) {
       typingRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [isTyping]);
+  }, [isTyping, isAtBottom]);
 
   // Typing indicator
   useEffect(() => {
@@ -126,7 +127,7 @@ const ChatContainer = () => {
       fetchMessages(selectedConversation._id);
       axiosInstance.post(`/conversations/read/${selectedConversation._id}`);
     }
-  }, [fetchMessages, selectedConversation?._id]);
+  }, [fetchMessages, selectedConversation._id]);
 
   // Read receipts
   useEffect(() => {
@@ -196,7 +197,7 @@ const ChatContainer = () => {
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-auto">
+    <div className="relative flex-1 flex flex-col overflow-auto">
       <ChatHeader />
       <div
         className="flex-1 overflow-y-auto p-4 space-y-4"
@@ -242,7 +243,7 @@ const ChatContainer = () => {
 
               {/* Bubble */}
               <div
-                className="chat-bubble flex flex-col relative"
+                className="chat-bubble max-w-[50%] flex flex-col relative"
                 onContextMenu={(e) => {
                   e.preventDefault();
                   setReactionTarget(message._id);
@@ -255,12 +256,14 @@ const ChatContainer = () => {
                 onMouseEnter={() => setStatusDetailsTarget(message._id)}
                 onMouseLeave={() => setStatusDetailsTarget(null)}
               >
-                {message.text && <p>{message.text}</p>}
+                {message.text && (
+                  <p className="max-sm:text-sm">{message.text}</p>
+                )}
                 {message.image && (
                   <img
                     src={message.image}
                     alt="message attachment"
-                    className="max-w-md md:max-w-sm rounded-lg mt-2"
+                    className="max-w-md max-md:max-w-2xs rounded-lg mt-2"
                   />
                 )}
 
@@ -362,11 +365,11 @@ const ChatContainer = () => {
 
                 {/* Status Details Popup (only on hover/double-click) */}
                 {statusDetailsTarget === message._id && isOutgoing && (
-                  <div className="absolute -bottom-8 right-0 bg-[#202c33] text-[#e9edef] shadow-2xl rounded-lg p-3 text-sm z-50 w-52">
+                  <div className="absolute -bottom-8 right-0 bg-[#202c33] text-[#e9edef] shadow-2xl rounded-lg p-3 text-sm z-50 w-max">
                     <div className="flex flex-col gap-2">
                       {/* Read Status Row */}
                       {message.readAt && (
-                        <div className="flex justify-between items-center w-full">
+                        <div className="flex max-sm:flex-col justify-between items-center w-full">
                           <div className="flex items-center gap-2.5">
                             {/* Blue checkmark for 'Read' */}
                             <BsCheck2All className="text-[#53bdeb]" size={20} />
@@ -380,7 +383,7 @@ const ChatContainer = () => {
 
                       {/* Delivered Status Row */}
                       {message.deliveredAt && (
-                        <div className="flex justify-between items-center w-full">
+                        <div className="flex max-sm:flex-col justify-between items-center w-full">
                           <div className="flex items-center gap-2.5">
                             {/* Grey checkmark for 'Delivered' */}
                             <BsCheck2All className="text-[#8696a0]" size={20} />
@@ -413,6 +416,28 @@ const ChatContainer = () => {
           </div>
         )}
       </div>
+      {!isAtBottom && (
+        <button
+          className="absolute bottom-20 right-4 bg-blue-500 text-white cursor-pointer px-3 py-2 rounded-full shadow-lg"
+          onClick={() => {
+            // scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            // smooth scroll
+            scrollRef.current.scrollTo({
+              top: scrollRef.current.scrollHeight,
+              behavior: "smooth",
+            });
+            setTimeout(() => {
+              setIsAtBottom(true);
+            }, 1500);
+          }}
+        >
+          {isTyping ? (
+            <MoreHorizontal className="animate-pulse w-6 h-6 text-white" />
+          ) : (
+            <ArrowDownToLine className="w-6 h-6 text-white" />
+          )}
+        </button>
+      )}
       <MessageInput />
     </div>
   );

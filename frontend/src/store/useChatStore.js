@@ -11,6 +11,7 @@ export const useChatStore = create((set, get) => ({
   hasMoreMessages: true,
   isMessagesLoading: false,
   lastSeen: new Date(),
+  isPaginating: false, // 🔥 track if paginating
 
   getConversations: async () => {
     const res = await axiosInstance.get("/conversations");
@@ -20,6 +21,7 @@ export const useChatStore = create((set, get) => ({
   fetchMessages: async (conversationId, { limit = 20, before } = {}) => {
     set({ isMessagesLoading: true });
     try {
+      console.log("Fetching messages for conversation:", conversationId);
       const params = new URLSearchParams();
       params.append("limit", limit);
       if (before) params.append("before", before);
@@ -31,6 +33,7 @@ export const useChatStore = create((set, get) => ({
       set((s) => ({
         messages: before ? [...newMessages, ...s.messages] : newMessages,
         hasMoreMessages: newMessages.length === limit,
+        isPaginating: Boolean(before), // 🔥 track pagination fetch
       }));
     } catch (error) {
       toast.error("Failed to load messages");

@@ -89,7 +89,7 @@ const PeopleYouMayKnow = ({ excludeIds }) => {
               </div>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex md:flex-row sm:flex-col gap-2">
               {u.friendshipStatus === "none" && (
                 <button
                   onClick={() => handleAddFriend(u._id)}

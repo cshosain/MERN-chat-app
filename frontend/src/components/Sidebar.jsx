@@ -32,7 +32,7 @@ const Sidebar = () => {
   if (isConversationsLoading) return <SidebarSkeleton />;
 
   return (
-    <aside className="h-full w-20 lg:w-72 border-r border-base-300 flex flex-col">
+    <aside className="h-full w-20 sm:w-52 md:w-72 border-r border-base-300 flex flex-col">
       <div className="border-b border-base-300 w-full p-5">
         <div className="flex items-center gap-2">
           <Users className="size-6" />
@@ -96,7 +96,7 @@ const Sidebar = () => {
                 )}
               </div>
 
-              <div className="hidden lg:block text-left min-w-0 flex-1">
+              <div className="hidden sm:block text-left min-w-0 flex-1">
                 <div className="font-medium truncate flex justify-between">
                   <span>{displayName}</span>
                   {unread > 0 && (
