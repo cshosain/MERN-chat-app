@@ -11,6 +11,10 @@ _Coming soon! Add will be added here._
 
 ---
 
+#### Live Link : https://mern-chat-app-1-xlgz.onrender.com
+
+For explore or start conversation create two account and start messageing. Don't worry. The registration process is supper simple right now.
+
 ## 🚀 Features
 
 - **Authentication**
