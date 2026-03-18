@@ -5,6 +5,7 @@ import { useChatStore } from "../store/useChatStore";
 import { useNavigate } from "react-router-dom";
 import { axiosInstance } from "../lib/axios";
 import toast from "react-hot-toast";
+import { getConversationKey, setConversationKey } from "../lib/utils";
 
 const FriendList = () => {
   const { friends, getFriends } = useFriendStore();
@@ -21,14 +22,32 @@ const FriendList = () => {
       (c) => !c.isGroup && c.participants.some((p) => p._id === friend._id)
     );
     if (conv) {
-      setSelectedConversation(conv);
-      navigate("/");
+      // E2EE: Check for key before opening
+      try {
+        await getConversationKey(conv._id);
+        setSelectedConversation(conv);
+        navigate("/");
+      } catch {
+        toast.error("Encryption key for this conversation is missing. You cannot read or send messages until the key is restored.");
+      }
     } else {
       // Start a new conversation via API
       try {
         const res = await axiosInstance.post(
           `/conversations/start/${friend._id}`
         );
+        // E2EE: Generate and store a new AES key for this conversation
+        const conversationId = res.data._id;
+        if (!localStorage.getItem(`convkey_${conversationId}`)) {
+          const key = await window.crypto.subtle.generateKey(
+            { name: "AES-GCM", length: 256 },
+            true,
+            ["encrypt", "decrypt"]
+          );
+          const raw = await window.crypto.subtle.exportKey("raw", key);
+          const base64Key = btoa(String.fromCharCode(...new Uint8Array(raw)));
+          setConversationKey(conversationId, base64Key);
+        }
         setSelectedConversation(res.data);
         navigate("/");
         toast.success("Conversation started");

@@ -79,10 +79,11 @@ export const login = async (req, res) => {
 };
 export const logout = (_req, res) => {
   // Handle logout logic here
+  // To do: Keep sameSite to strict in development but none in production
   try {
     res.clearCookie("chatAppUserToken", {
       httpOnly: true,
-      sameSite: "none",
+      sameSite: "strict",
       secure: process.env.NODE_ENV !== "development",
     });
     return res.status(200).json({ message: "Logged out successfully" });

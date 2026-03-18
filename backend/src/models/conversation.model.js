@@ -21,6 +21,7 @@ const conversationSchema = new mongoose.Schema(
       of: Number,
       default: {},
     },
+    encryptionKey: { type: String }, // base64 or encrypted key
   },
   { timestamps: true }
 );

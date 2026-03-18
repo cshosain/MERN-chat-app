@@ -8,6 +8,7 @@ import { formatLastSeen, formatMessageTime } from "../lib/utils";
 import { MoreHorizontal, ArrowDownToLine } from "lucide-react";
 import { axiosInstance } from "../lib/axios";
 import { BsCheck2All } from "react-icons/bs";
+import EncryptionModal from "./EncryptionModal";
 
 const EMOJI_MAP = {
   "👍": "like",
@@ -41,6 +42,7 @@ const ChatContainer = () => {
   // Reaction UI state
   const [reactionTarget, setReactionTarget] = useState(null);
   const [statusDetailsTarget, setStatusDetailsTarget] = useState(null);
+  const [showEncryptionModal, setShowEncryptionModal] = useState(false);
   const reactions = Object.keys(EMOJI_MAP);
 
   // Initial load
@@ -48,7 +50,7 @@ const ChatContainer = () => {
     if (selectedConversation?._id) {
       fetchMessages(selectedConversation._id);
     }
-  }, [selectedConversation?._id, fetchMessages]);
+  }, [selectedConversation._id, fetchMessages]);
 
   // Infinite scroll: fetch more when scrolled to top
   const handleScroll = async () => {
@@ -345,7 +347,7 @@ const ChatContainer = () => {
                 {reactionTarget === message._id && (
                   <div
                     ref={pickerRef}
-                    className="absolute -top-10 left-0 bg-white shadow-md rounded-full px-2 py-1 flex space-x-2 z-50"
+                    className="absolute top-1 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white shadow-md rounded-full px-2 py-1 flex space-x-2 z-50"
                   >
                     {reactions.map((emoji) => (
                       <button
@@ -438,7 +440,19 @@ const ChatContainer = () => {
           )}
         </button>
       )}
+      <p className="text-xs text-center text-gray-500">
+        Messages are end to end encrypted.{" "}
+        <span
+          className="underline cursor-pointer"
+          onClick={() => setShowEncryptionModal(true)}
+        >
+          Learn more
+        </span>
+      </p>
       <MessageInput />
+
+      {/* Encryption Info Modal */}
+      <EncryptionModal isOpen={showEncryptionModal} onClose={() => setShowEncryptionModal(false)} />
     </div>
   );
 };

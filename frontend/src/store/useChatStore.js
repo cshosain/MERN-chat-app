@@ -3,7 +3,9 @@ import { create } from "zustand";
 import { axiosInstance } from "../lib/axios";
 import { useAuthStore } from "./useAuthStore";
 import toast from "react-hot-toast";
+import { decryptMessage, getConversationKey, encryptMessage } from "../lib/utils";
 
+// This store manages all chat-related state and actions, including conversations, messages, and real-time updates via WebSocket.
 export const useChatStore = create((set, get) => ({
   conversations: [],
   selectedConversation: null,
@@ -21,7 +23,6 @@ export const useChatStore = create((set, get) => ({
   fetchMessages: async (conversationId, { limit = 20, before } = {}) => {
     set({ isMessagesLoading: true });
     try {
-      console.log("Fetching messages for conversation:", conversationId);
       const params = new URLSearchParams();
       params.append("limit", limit);
       if (before) params.append("before", before);
@@ -29,7 +30,28 @@ export const useChatStore = create((set, get) => ({
       const res = await axiosInstance.get(
         `/conversations/by-conversation/${conversationId}?${params.toString()}`
       );
-      const newMessages = res.data;
+      const conversationKey = await getConversationKey(conversationId); 
+      const newMessages = await Promise.all(
+        res.data.map(async (msg) => {
+          let decryptedText = "";
+          if (msg.text) {
+            try {
+              const parsed = JSON.parse(msg.text);
+              decryptedText = await decryptMessage(
+                parsed,
+                conversationKey
+              );
+              // Ensure decryptedText is a string
+              if (typeof decryptedText !== "string") {
+                decryptedText = String(decryptedText);
+              }
+            } catch {
+              decryptedText = "[Decryption failed]1";
+            }
+          }
+          return { ...msg, text: decryptedText };
+        })
+      );
       set((s) => ({
         messages: before ? [...newMessages, ...s.messages] : newMessages,
         hasMoreMessages: newMessages.length === limit,
@@ -55,23 +77,45 @@ export const useChatStore = create((set, get) => ({
 
   sendMessage: async ({ conversationId, text, image }) => {
     try {
+      let encryptedText = null;
+      if (text) {
+        const conversationKey = await getConversationKey(conversationId);
+        const encrypted = await encryptMessage(text, conversationKey);
+        encryptedText = JSON.stringify(encrypted);
+      }
       const res = await axiosInstance.post(`/messages/send/${conversationId}`, {
-        text,
+        text: encryptedText,
         image,
       });
       const newMsg = res.data;
 
+      // Decrypt the sent message for sender UI
+      let decryptedText = "";
+      if (newMsg.text) {
+        try {
+          const conversationKey = await getConversationKey(conversationId);
+          const parsed = JSON.parse(newMsg.text);
+          decryptedText = await decryptMessage(parsed, conversationKey);
+          if (typeof decryptedText !== "string") {
+            decryptedText = String(decryptedText);
+          }
+        } catch {
+          decryptedText = "[Decryption failed]";
+        }
+      }
+      const decryptedMsg = { ...newMsg, text: decryptedText };
+
       if (get().selectedConversation?._id === conversationId) {
-        set((s) => ({ messages: [...s.messages, newMsg] }));
+        set((s) => ({ messages: [...s.messages, decryptedMsg] }));
       }
 
       set((s) => ({
         conversations: s.conversations.map((c) =>
-          c._id === conversationId ? { ...c, lastMessage: newMsg } : c
+          c._id === conversationId ? { ...c, lastMessage: decryptedMsg } : c
         ),
       }));
     } catch (error) {
-      toast.error(error.response.data.message);
+      toast.error(error.response?.data?.message || "Failed to send message");
     }
   },
 
@@ -79,9 +123,24 @@ export const useChatStore = create((set, get) => ({
     const socket = useAuthStore.getState().socket;
     if (!socket) return;
 
-    socket.on("message:new", ({ conversationId, message }) => {
+    socket.on("message:new", async ({ conversationId, message }) => {
+      let decryptedText = "";
+      if (message.text) {
+        try {
+          const conversationKey = await getConversationKey(conversationId);
+          const parsed = JSON.parse(message.text);
+          decryptedText = await decryptMessage(parsed, conversationKey);
+          if (typeof decryptedText !== "string") {
+            decryptedText = String(decryptedText);
+          }
+        } catch (err) {
+          console.error("Decryption failed error:", err);
+          decryptedText = "[Decryption failed]";
+        }
+      }
+      const decryptedMessage = { ...message, text: decryptedText };
       if (get().selectedConversation?._id === conversationId) {
-        set((s) => ({ messages: [...s.messages, message] }));
+        set((s) => ({ messages: [...s.messages, decryptedMessage] }));
         axiosInstance.post(`/conversations/read/${conversationId}`);
       } else {
         set((s) => ({
@@ -89,7 +148,7 @@ export const useChatStore = create((set, get) => ({
             c._id === conversationId
               ? {
                   ...c,
-                  lastMessage: message,
+                  lastMessage: decryptedMessage,
                   unreadCount: (c.unreadCount || 0) + 1,
                 }
               : c

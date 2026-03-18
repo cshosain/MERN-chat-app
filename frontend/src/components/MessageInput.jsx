@@ -35,8 +35,8 @@ const MessageInput = () => {
     try {
       await sendMessage({
         conversationId: selectedConversation._id,
-        text: text.trim(),
-        image: imagePreview,
+        text: text.trim() || null,
+        image: imagePreview, // You can also encrypt image if needed
       });
       setText("");
       removeImage();

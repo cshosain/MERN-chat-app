@@ -4,6 +4,7 @@ import { UserPlus, MessageSquare, Check, Clock } from "lucide-react";
 import toast from "react-hot-toast";
 import { useChatStore } from "../store/useChatStore";
 import { useNavigate } from "react-router-dom";
+import { setConversationKey } from "../lib/utils";
 
 const PeopleYouMayKnow = ({ excludeIds }) => {
   const [suggestions, setSuggestions] = useState([]);
@@ -54,6 +55,20 @@ const PeopleYouMayKnow = ({ excludeIds }) => {
   const handleMessage = async (userId) => {
     try {
       const res = await axiosInstance.post(`/conversations/start/${userId}`);
+      // E2EE: Generate and store a new AES key for this conversation if not present
+      const conversationId = res.data._id;
+      if (!localStorage.getItem(`convkey_${conversationId}`)) {
+        // Generate a 256-bit AES key
+        const key = await window.crypto.subtle.generateKey(
+          { name: "AES-GCM", length: 256 },
+          true,
+          ["encrypt", "decrypt"]
+        );
+        // Export and encode as base64
+        const raw = await window.crypto.subtle.exportKey("raw", key);
+        const base64Key = btoa(String.fromCharCode(...new Uint8Array(raw)));
+        setConversationKey(conversationId, base64Key);
+      }
       navigate("/");
       setSelectedConversation(res.data);
       toast.success(

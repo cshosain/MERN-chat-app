@@ -3,6 +3,7 @@ import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
 import SidebarSkeleton from "./skeletons/SidebarSkeleton";
 import { Users } from "lucide-react";
+import { decryptMessage, getConversationKey } from "../lib/utils";
 
 const Sidebar = () => {
   const {
@@ -15,6 +16,7 @@ const Sidebar = () => {
 
   const { authUser, onlineUsers } = useAuthStore();
   const [showOnlineOnly, setShowOnlineOnly] = useState(false);
+  const [decryptedMessages, setDecryptedMessages] = useState({});
 
   useEffect(() => {
     getConversations();
@@ -23,11 +25,67 @@ const Sidebar = () => {
   // filter if "online only" checked (works only for 1-1 convos)
   const filtered = showOnlineOnly
     ? conversations.filter((c) => {
-        if (c.isGroup) return true; // groups always visible
-        const other = c.participants.find((p) => p._id !== authUser._id);
-        return other && onlineUsers.includes(other._id);
-      })
+      if (c.isGroup) return true; // groups always visible
+      const other = c.participants.find((p) => p._id !== authUser._id);
+      return other && onlineUsers.includes(other._id);
+    })
     : conversations;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadDecryptedMessages = async () => {
+      const entries = await Promise.all(
+        filtered.map(async (conv) => {
+          const lastMsg = conv.lastMessage;
+          if (!lastMsg?.text) return [conv._id, null];
+
+          try {
+            // If the message is already decrypted (plain text), JSON.parse will fail.
+            // In that case we just use the text as-is.
+            let parsed;
+            try {
+              parsed = JSON.parse(lastMsg.text);
+            } catch {
+              return [conv._id, lastMsg.text];
+            }
+
+            const conversationKey = await getConversationKey(conv._id);
+            const decrypted = await decryptMessage(parsed, conversationKey);
+            return [
+              conv._id,
+              typeof decrypted === "string" ? decrypted : String(decrypted),
+            ];
+          } catch {
+            return [conv._id, "[Decryption failed] in sidebar"];
+          }
+        })
+      );
+
+      if (!cancelled) {
+        setDecryptedMessages(Object.fromEntries(entries));
+      }
+    };
+
+    loadDecryptedMessages();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filtered]);
+
+  const handleSelectConversation = async (conv) => {
+    try {
+      let res = await getConversationKey(conv._id);
+      console.log("Conversation key retrieved:", res);
+      setSelectedConversation(conv);
+    } catch {
+      console.error("Encryption key missing for conversation:", conv._id);
+      alert(
+        "Encryption key for this conversation is missing. You cannot read or send messages until the key is restored."
+      );
+    }
+  };
 
   if (isConversationsLoading) return <SidebarSkeleton />;
 
@@ -74,16 +132,20 @@ const Sidebar = () => {
 
           const lastMsg = conv.lastMessage;
           const unread = conv.unreadCount || 0;
+          const decryptedText = decryptedMessages[conv._id];
+
+          const lastMessagePreview = lastMsg
+            ? decryptedText ?? (lastMsg.image ? "📷 Photo" : "Decrypting...")
+            : "No messages yet";
 
           return (
             <button
               key={conv._id}
-              onClick={() => setSelectedConversation(conv)}
-              className={`w-full p-3 flex items-center gap-3 hover:bg-base-300 transition-colors ${
-                selectedConversation?._id === conv._id
+              onClick={() => handleSelectConversation(conv)}
+              className={`w-full p-3 flex items-center gap-3 hover:bg-base-300 transition-colors ${selectedConversation?._id === conv._id
                   ? "bg-base-300 ring-1 ring-base-300"
                   : ""
-              }`}
+                }`}
             >
               <div className="relative mx-auto lg:mx-0">
                 <img
@@ -106,13 +168,7 @@ const Sidebar = () => {
                   )}
                 </div>
                 <div className="text-sm text-zinc-400 truncate">
-                  {lastMsg
-                    ? lastMsg.text
-                      ? lastMsg.text
-                      : lastMsg.image
-                      ? "📷 Photo"
-                      : ""
-                    : "No messages yet"}
+                  {lastMessagePreview}
                 </div>
               </div>
             </button>

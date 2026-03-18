@@ -1,3 +1,38 @@
+// --- E2EE Conversation Key Management (Demo) ---
+// In production, use secure key exchange and storage!
+
+import { axiosInstance } from "./axios";
+
+// Save a base64-encoded AES key for a conversation
+export function setConversationKey(conversationId, base64Key) {
+  localStorage.setItem(`convkey_${conversationId}`, base64Key);
+}
+
+// Retrieve and import the AES key for a conversation
+export async function getConversationKey(conversationId) {
+  let base64Key = localStorage.getItem(`convkey_${conversationId}`);
+  if (!base64Key) {
+    // Fetch conversation from backend
+    try {
+      const res = await axiosInstance.get(`/conversations/convForEncryptionKey/${conversationId}`);
+      if (!res.data) throw new Error("Failed to fetch conversation key");
+      const conv = res.data;
+      base64Key = conv.encryptionKey;
+      if (!base64Key) throw new Error("No encryption key in conversation");
+      setConversationKey(conversationId, base64Key);
+    } catch (err) {
+      throw new Error("No key for this conversation");
+    }
+  }
+  const raw = Uint8Array.from(atob(base64Key), c => c.charCodeAt(0));
+  return window.crypto.subtle.importKey(
+    "raw",
+    raw,
+    "AES-GCM",
+    true,
+    ["encrypt", "decrypt"]
+  );
+}
 export function formatMessageTime(date) {
   return new Date(date).toLocaleTimeString("en-US", {
     hour: "2-digit",
@@ -65,4 +100,47 @@ export function formatLastSeen(isoString) {
   const month = String(lastSeenDate.getMonth() + 1).padStart(2, "0"); // Months are 0-indexed
   const year = lastSeenDate.getFullYear();
   return `${day}/${month}/${year}`;
+}
+
+export async function encryptMessage(plaintext, key) {
+  const enc = new TextEncoder();
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await window.crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    enc.encode(plaintext)
+  );
+  return {
+    iv: Array.from(iv),
+    ciphertext: Array.from(new Uint8Array(ciphertext)),
+  };
+}
+
+export async function decryptMessage({ iv, ciphertext }, key) {
+  const dec = new TextDecoder();
+  let decrypted;
+  try {
+    decrypted = await window.crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: new Uint8Array(iv) },
+      key,
+      new Uint8Array(ciphertext)
+    );
+  } catch (err) {
+    console.error("decryptMessage error:", err);
+    return "[Decryption failed]";
+  }
+  const decoded = dec.decode(decrypted);
+  return decoded;
+}
+
+// Helper to import a base64 key
+export async function importAesKey(base64Key) {
+  const raw = Uint8Array.from(atob(base64Key), c => c.charCodeAt(0));
+  return window.crypto.subtle.importKey(
+    "raw",
+    raw,
+    "AES-GCM",
+    true,
+    ["encrypt", "decrypt"]
+  );
 }

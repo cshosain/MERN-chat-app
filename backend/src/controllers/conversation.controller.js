@@ -1,3 +1,23 @@
+/**
+ * Fetch a conversation by ID (including encryptionKey)
+ */
+  import crypto from "crypto";
+export const getConversationById = async (req, res) => {
+  console.log("Received request to fetch conversation by ID:", req.params.id);
+  try {
+
+    const { id } = req.params;
+    console.log("Fetching conversation by ID:", id);
+    const userId = req.user._id;
+    const conv = await Conversation.findById(id);
+    if (!conv || !conv.participants.some((p) => String(p) === String(userId))) {
+      return res.status(403).json({ message: "Not a participant" });
+    }
+    res.json(conv);
+  } catch (e) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
 import { canMessage } from "../lib/utils.js";
 import Conversation from "../models/conversation.model.js";
 import Message from "../models/message.model.js";
@@ -73,13 +93,19 @@ export const startOrGetOneToOne = async (req, res) => {
     // Check privacy
     const allowed = await canMessage(me, userId);
 
-    conv = await Conversation.create({
-      isGroup: false,
-      participants: [me, userId],
-      status: allowed ? "active" : "pending",
-      requestedBy: allowed ? undefined : me,
-      unreadCounts: { [String(me)]: 0, [String(userId)]: 0 },
-    });
+      // Generate a base64 AES key for encryption
+      const crypto = require("crypto");
+      function generateBase64Key() {
+        return crypto.randomBytes(32).toString("base64"); // 256-bit key
+      }
+      conv = await Conversation.create({
+        isGroup: false,
+        participants: [me, userId],
+        status: allowed ? "active" : "pending",
+        requestedBy: allowed ? undefined : me,
+        unreadCounts: { [String(me)]: 0, [String(userId)]: 0 },
+        encryptionKey: generateBase64Key(),
+      });
 
     // If pending, notify recipient
     if (!allowed) {
@@ -112,13 +138,19 @@ export const startConversation = async (req, res) => {
 
     if (!conv) {
       const allowed = await canMessage(me, other);
-      conv = await Conversation.create({
-        participants: [me, other],
-        isGroup: false,
-        status: allowed ? "active" : "pending",
-        requestedBy: allowed ? undefined : me,
-        unreadCounts: { [String(me)]: 0, [String(other)]: 0 },
-      });
+        // Generate a base64 AES key for encryption
+      
+        function generateBase64Key() {
+          return crypto.randomBytes(32).toString("base64"); // 256-bit key
+        }
+        conv = await Conversation.create({
+          participants: [me, other],
+          isGroup: false,
+          status: allowed ? "active" : "pending",
+          requestedBy: allowed ? undefined : me,
+          unreadCounts: { [String(me)]: 0, [String(other)]: 0 },
+          encryptionKey: generateBase64Key(),
+        });
 
       // notify other user
       const sid = getReceiverSocketId(String(other));
