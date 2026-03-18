@@ -83,7 +83,7 @@ export const logout = (_req, res) => {
   try {
     res.clearCookie("chatAppUserToken", {
       httpOnly: true,
-      sameSite: "strict",
+      sameSite: process.env.NODE_ENV === "development" ? "strict" : "none",
       secure: process.env.NODE_ENV !== "development",
     });
     return res.status(200).json({ message: "Logged out successfully" });
