@@ -1,13 +1,13 @@
 # Chat-App
 
 A modern, privacy-focused real-time chat application built with **React**, **Node.js**, **Express**, **MongoDB**, and **Socket.IO**.  
-This project includes a full-featured frontend and backend, supporting messaging, friend requests, privacy controls, infinite scrolling, media sharing, and more.
+This project includes a full-featured frontend and backend, supporting end-to-end encrypted messaging, friend requests, privacy controls, infinite scrolling, media sharing, and more.
 
 ---
 
 ## 📹 Demo Video
 
-_Coming soon! Add will be added here._
+_Coming soon! Will be added here._
 
 ---
 
@@ -22,6 +22,7 @@ For explore or start conversation create two account and start messageing. Don't
   - (Currently, I have kept this authentication section simple to explore easily)
 - **Real-Time Messaging**
   - Send text, photos, and videos (with compression for bandwidth savings).
+  - End-to-end encryption for text messages to ensure privacy and security.
   - Typing indicators (can be hidden via privacy settings).
   - React to any message and change reaction.
   - Read receipts with detailed delivery/seen times (like WhatsApp).
@@ -51,7 +52,7 @@ For explore or start conversation create two account and start messageing. Don't
   - Give reaction and change existing reaction on distinct message at real-time.
 - **Upcoming Features / Currently Working with**
   - Google auth for easy sign up.
-  - End to end encryption for messages and media.
+  - End to end encryption for media (photos and videos).
   - Group chatting.
   - Instant voice message.
   - Voice and video call.
